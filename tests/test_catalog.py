@@ -1,3 +1,4 @@
+import sys
 import unittest
 
 from opener.catalog import APPS, defaults_for, installed
@@ -13,12 +14,14 @@ class InstalledTests(unittest.TestCase):
         self.assertEqual(set(got), {"notes"})
         self.assertEqual(got["notes"]["path"], "/yes/Notes.app")
 
+    @unittest.skipUnless(sys.platform == "darwin", "scans this Mac's Applications folders")
     def test_real_catalog_finds_notes_and_safari(self):
         got = installed(APPS)
         self.assertIn("notes", got)
         self.assertIn("safari", got)
         self.assertIn("brave", got)
 
+    @unittest.skipUnless(sys.platform == "darwin", "scans this Mac's Applications folders")
     def test_startup_scan_includes_textedit_and_tv(self):
         got = installed()
         self.assertIn("textedit", got)
