@@ -1,6 +1,6 @@
 # Sayso
 
-Speak at the Mac notch. The named app opens.
+Speak at the Mac notch. The named app opens — and the Mac itself obeys: volume, brightness, dark mode, lock, battery, AirDrop.
 
 <p align="center">
   <img src="docs/images/hero.png" alt="Sayso — the real notch island after saying 'open notes': Notes app icon, OPENED, Notes" width="840">
@@ -23,7 +23,8 @@ You  →  notch island  →  POST :8010/decide     (laya-opener, this repo)
                      POST :8001/v1/systemone   (laya-upstream)
                               │
                               ▼
-                     open / close / quit / kill
+            open / close / quit / kill / volume / brightness /
+            dark mode / lock / battery / wifi / bluetooth / airdrop
 ```
 
 | | |
@@ -31,7 +32,8 @@ You  →  notch island  →  POST :8010/decide     (laya-opener, this repo)
 | **~250 ms** | named-app decide (p50, 5-way head) |
 | **~400 ms** | paraphrase decide (daily 15-way set) |
 | **33–53 ms** | app launch (`NSWorkspace`) |
-| **206** | unit tests |
+| **~3 ms** | system-command decide (host parse, no Laya call) |
+| **228** | unit tests |
 | **0** | cloud LLM calls |
 | **macOS 14+** | Apple Silicon |
 | **Python + Swift** | decide API in Docker · island on the host |
@@ -49,6 +51,16 @@ You  →  notch island  →  POST :8010/decide     (laya-opener, this repo)
 | *quit brave* / *kill brave* | Quits or force-quits |
 | *hello* / unknown name | Opens **nothing** |
 | *goodbye* | Island says goodbye and Sayso quits |
+| *increase volume by 2* | Volume up 20% (steps are 10%; *by 2 percent* = 2%) |
+| *volume up* / *mute* / *set volume to 50* | Does what it says — CoreAudio, works on HDMI outputs |
+| *make the screen brighter* / *dim the screen* | Brightness ∓10%; *increase brightness by 3* = +30% |
+| *turn on dark mode* / *light mode* | System appearance flips (one-time Automation consent) |
+| *night mode on* | Night Shift on |
+| *lock screen* | Locks the Mac (synthetic ⌃⌘Q) |
+| *battery percentage* | Island says e.g. “Battery 100%, plugged in.” |
+| *open wifi settings* / *open bluetooth settings* | That System Settings pane opens |
+| *turn off airdrop* | AirDrop off (*airdrop everyone* turns it back on) |
+| *open notes and increase volume by 2* | Both — mixed app + system commands compose |
 
 Unknown name → nothing. No silent fallthrough to Chrome or Calendar.
 
@@ -237,6 +249,7 @@ sayso/
 │   ├── loop.py                    # split / Laya / alias recover
 │   ├── client.py                  # questions_for + POST Laya
 │   ├── policy.py                  # Decision from probabilities
+│   ├── system_cmd.py              # system controls: host parse + Laya fallback + labels
 │   ├── alias.py                   # spoken_key, resolve_alias, prefer_catalog
 │   └── …
 ├── native/notch/                  # Swift accessory (LayaOpener.app)
@@ -259,6 +272,7 @@ Python and Swift keep alias / speech-form / `preferCatalog` rules in lockstep.
 - Several names in one phrase (`and` / `,` / `then`) → act on every hit.
 - Close = windows only (one Accessibility grant). Quit / kill = `terminate` / `forceTerminate`. Finder and Sayso are protected.
 - `open <site> in <app>` and `open clipboard` are parsed on the host; Laya still names the app. Unknown site with no app → ask, no default-browser guess.
+- System controls (volume, brightness, appearance, Night Shift, lock, battery, settings panes, AirDrop) are parsed on the host and **skip Laya** when the phrasing fully parses (`open clipboard` precedent). Paraphrases without gate words still go through Laya's `system` head. Execution happens on the Mac in Swift; the caption reports the real result (true level, battery, failure), never a canned line.
 
 ## What this is not
 
