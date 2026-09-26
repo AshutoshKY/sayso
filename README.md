@@ -3,10 +3,16 @@
 Speak at the Mac notch. The named app opens.
 
 <p align="center">
-  <img src="docs/images/island-ui.png" alt="Sayso island after opening Claude — black notch island, Claude icon, OPENED, Claude" width="820">
+  <img src="docs/images/hero.png" alt="Sayso — the real notch island after saying 'open notes': Notes app icon, OPENED, Notes" width="840">
 </p>
 
 Hover the purple dot, press **⌃⌥Space**, or say **Hey Mac**. A black island drops. You talk. Laya — running **on this Mac, in Docker, no internet** — picks the installed app. Sayso opens it, closes its windows, or quits it.
+
+<p align="center">
+  <img src="docs/images/states.png" alt="The three real states — Idle: purple dot by the notch. Listening: live EQ and transcript with Cancel. Opened: the app launches in about 1.4 s." width="840">
+</p>
+
+*Both images show real captures of the live island — no mockups.*
 
 > **No cloud LLM.** Not ChatGPT. Not Claude. Not Gemini. Speech is Apple Speech. The decision is Laya System-1 on CPU. Once the image is loaded, the stack is offline.
 
