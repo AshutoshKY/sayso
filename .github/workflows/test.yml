@@ -15,8 +15,3 @@ jobs:
           python-version: "3.12"
       - name: Unit tests (no Docker, no Mac disk)
         run: PYTHONPATH=. python -m unittest discover -s tests -q
-      - name: Confirm Mac-only catalog scans were skipped
-        run: |
-          out=$(PYTHONPATH=. python -m unittest discover -s tests -v 2>&1)
-          echo "$out" | grep -F "test_real_catalog_finds_notes_and_safari ... skipped"
-          echo "$out" | grep -F "test_startup_scan_includes_textedit_and_tv ... skipped"

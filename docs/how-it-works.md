@@ -1,4 +1,4 @@
-# How Laya Island works
+# How Notchd works
 
 Voice on the Mac notch → Laya in Docker → open / close / quit the named installed app.
 
