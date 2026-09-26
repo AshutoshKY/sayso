@@ -1,4 +1,4 @@
-# How Notchd works
+# How Sayso works
 
 Voice on the Mac notch → Laya in Docker → open / close / quit the named installed app.
 

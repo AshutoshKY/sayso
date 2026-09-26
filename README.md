@@ -1,8 +1,8 @@
-# Notchd
+# Sayso
 
 Speak at the Mac notch. The named app opens.
 
-Hover the purple dot, press **⌃⌥Space**, or say **Hey Mac**. A black island drops. You talk. Laya — running **on this Mac, in Docker, no internet** — picks the installed app. Notchd opens it, closes its windows, or quits it.
+Hover the purple dot, press **⌃⌥Space**, or say **Hey Mac**. A black island drops. You talk. Laya — running **on this Mac, in Docker, no internet** — picks the installed app. Sayso opens it, closes its windows, or quits it.
 
 > **No cloud LLM.** Not ChatGPT. Not Claude. Not Gemini. Speech is Apple Speech. The decision is Laya System-1 on CPU. Once the image is loaded, the stack is offline.
 
@@ -22,7 +22,7 @@ You speak  →  notch island hears it  →  Laya picks the app  →  Mac does it
 | *close brave* | Closes the windows; Brave stays running |
 | *quit brave* / *kill brave* | Quits or force-quits |
 | *hello* | Opens **nothing** |
-| *goodbye* | Island says goodbye and Notchd quits |
+| *goodbye* | Island says goodbye and Sayso quits |
 
 Unknown name → nothing. No silent fallthrough to Chrome or Calendar.
 
@@ -79,8 +79,8 @@ Needs: macOS 14+ on Apple Silicon, Xcode Command Line Tools, Docker Desktop or O
 If `laya-upstream:latest` is missing, compose will fail on the `laya` service. Load that image from the Laya project first.
 
 ```bash
-git clone https://github.com/AshutoshKY/notchd.git
-cd notchd
+git clone https://github.com/AshutoshKY/sayso.git
+cd sayso
 ./launch
 ```
 
@@ -146,7 +146,7 @@ curl -sS http://127.0.0.1:8010/decide \
 ## What's in the box
 
 ```
-notchd/
+sayso/
 ├── launch                         # compose up + open the island
 ├── docker-compose.yml             # laya-upstream :8001, laya-opener :8010
 ├── Dockerfile                     # python:3.12-slim → opener.server
@@ -164,7 +164,7 @@ notchd/
 - Every utterance calls Laya. Aliases recover after the model answers; they never skip it.
 - Unknown → open nothing.
 - Several names in one phrase → act on every hit.
-- Close = windows (one Accessibility grant). Quit / kill = terminate. Finder and Notchd are protected.
+- Close = windows (one Accessibility grant). Quit / kill = terminate. Finder and Sayso are protected.
 
 ## What this is not
 
