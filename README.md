@@ -1,8 +1,10 @@
-# Laya Notch Voice Opener
+# Laya Island
 
-Voice on the Mac notch → Laya in Docker → open, close, quit, or force-quit the named installed app.
+Voice on the Mac notch → **Laya in Docker** → open, close, quit, or force-quit the named installed app.
 
 This product exists to **test Laya**, not to bypass it. Every utterance is a Laya prompt. The Mac app only listens, shows the island, and executes. Inference never runs on the host.
+
+> **No cloud LLM.** No OpenAI, Anthropic, Gemini, or any remote chat API. Speech is Apple Speech. The app pick is Laya System-1 (`laya-upstream`) running **on this machine, in Docker, on CPU**. Offline once the image is loaded (`HF_HUB_OFFLINE=1`). The host never calls a model.
 
 ```
 You  →  notch island  →  POST :8010/decide     (laya-opener, this repo)
@@ -99,8 +101,8 @@ If you do not have `laya-upstream:latest`, `docker compose up` will fail on the 
 ## Run locally
 
 ```bash
-git clone https://github.com/AshutoshKY/laya-notch-voice-opener.git
-cd laya-notch-voice-opener
+git clone https://github.com/AshutoshKY/laya-island.git
+cd laya-island
 ./launch
 ```
 
@@ -191,7 +193,7 @@ curl -sS http://127.0.0.1:8010/decide \
 ## Repo layout
 
 ```
-laya-notch-voice-opener/
+laya-island/
 ├── launch                         # compose up + open the notch app
 ├── docker-compose.yml             # laya-upstream :8001, laya-opener :8010
 ├── Dockerfile                     # python:3.12-slim → opener.server
@@ -231,6 +233,7 @@ Python and Swift keep alias / speech-form / `preferCatalog` rules in lockstep.
 - Not an on-host model runner.
 - Not a second speech engine.
 - Not a fallback-to-Chrome product.
+- Not a ChatGPT / Claude / Gemini wrapper. There is no cloud LLM in this stack.
 
 ## License
 

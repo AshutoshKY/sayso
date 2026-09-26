@@ -1,8 +1,8 @@
-# How Laya Opener works
+# How Laya Island works
 
 Voice on the Mac notch → Laya in Docker → open / close / quit the named installed app.
 
-This product exists to **test Laya**, not to bypass it. Every utterance is a Laya prompt. The Mac app only listens, shows the island, and executes. Inference never runs on the host.
+This product exists to **test Laya**, not to bypass it. Every utterance is a Laya prompt. The Mac app only listens, shows the island, and executes. Inference never runs on the host. There is no cloud LLM in the path.
 
 ```
 mic  →  notch  →  POST :8010/decide   (laya-opener container)
