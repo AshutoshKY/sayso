@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/icon.png" alt="Sayso App Icon" width="120" height="120">
+</p>
+
 # Sayso
 
 Speak at the Mac notch. The named app opens — and the Mac itself obeys: volume, brightness, dark mode, lock, battery, AirDrop.
