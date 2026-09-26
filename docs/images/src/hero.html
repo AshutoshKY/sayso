@@ -3,11 +3,20 @@
 <head>
 <meta charset="utf-8">
 <style>
-  :root { --bg: #0a0a0d; --purple: #a85cfa; }
+  :root {
+    --bg: #0a0a0d;
+    --ink: #ffffff;
+    --muted: #9a9aa4;
+    --pill-border: #2c2c36;
+    --pill-bg: #141419;
+    --pill-ink: #cfcfd8;
+    --purple: #a85cfa;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 980px; height: 330px; }
+  html, body { width: 1080px; height: 460px; }
   body {
     background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
     position: relative;
     overflow: hidden;
     display: flex;
@@ -16,16 +25,16 @@
   }
   .aura {
     position: absolute;
-    top: -150px; left: 50%;
-    width: 1000px; height: 560px;
+    top: -120px; left: 50%;
+    width: 1100px; height: 540px;
     transform: translateX(-50%);
-    background: radial-gradient(ellipse at 50% 25%, rgba(168, 92, 250, 0.20), transparent 62%);
+    background: radial-gradient(ellipse at 50% 35%, rgba(168, 92, 250, 0.22), transparent 64%);
     pointer-events: none;
   }
   .notch {
-    width: 300px; height: 38px;
+    width: 270px; height: 36px;
     background: #000;
-    border-radius: 0 0 24px 24px;
+    border-radius: 0 0 22px 22px;
     position: relative;
     z-index: 2;
   }
@@ -35,17 +44,99 @@
     z-index: 1;
   }
   .island img {
-    width: 560px;
+    width: 500px;
     display: block;
     filter:
-      drop-shadow(0 34px 80px rgba(0, 0, 0, 0.65))
-      drop-shadow(0 0 110px rgba(168, 92, 250, 0.12));
+      drop-shadow(0 30px 70px rgba(0, 0, 0, 0.75))
+      drop-shadow(0 0 80px rgba(168, 92, 250, 0.15));
+  }
+  .brand {
+    margin-top: 36px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+  }
+  .title-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    position: relative;
+  }
+  .title-aura {
+    position: absolute;
+    width: 520px; height: 170px;
+    background: radial-gradient(ellipse at 50% 50%, rgba(168, 92, 250, 0.28), transparent 70%);
+    pointer-events: none;
+  }
+  .app-icon {
+    width: 66px;
+    height: 66px;
+    display: block;
+    border-radius: 15px;
+    position: relative;
+    z-index: 1;
+    box-shadow: 
+      0 0 0 1px rgba(255, 255, 255, 0.12),
+      0 12px 28px rgba(0, 0, 0, 0.65),
+      0 0 32px rgba(168, 92, 250, 0.35);
+  }
+  .wordmark {
+    font-size: 64px;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+    line-height: 1;
+    position: relative;
+    z-index: 1;
+  }
+  .tagline {
+    margin-top: 13px;
+    font-size: 20px;
+    color: var(--muted);
+    letter-spacing: -0.01em;
+  }
+  .pills {
+    margin-top: 22px;
+    display: flex;
+    gap: 12px;
+  }
+  .pill {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--pill-ink);
+    border: 1px solid var(--pill-border);
+    border-radius: 999px;
+    padding: 7px 17px;
+    letter-spacing: -0.005em;
+    background: var(--pill-bg);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  }
+  .pill kbd {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px;
   }
 </style>
 </head>
 <body>
   <div class="aura"></div>
   <div class="notch"></div>
-  <div class="island"><img src="x-opened-xl.png" alt=""></div>
+  <div class="island"><img src="x-opened-xl.png" alt="Sayso dynamic island"></div>
+  <div class="brand">
+    <div class="title-row">
+      <div class="title-aura"></div>
+      <img class="app-icon" src="appicon.png" alt="Sayso App Icon">
+      <div class="wordmark">Sayso</div>
+    </div>
+    <div class="tagline">Speak to Mac. The named app opens.</div>
+    <div class="pills">
+      <div class="pill">Hover the dot</div>
+      <div class="pill"><kbd>&#8963;&#8997;Space</kbd></div>
+      <div class="pill">&ldquo;Hey Mac&rdquo;</div>
+    </div>
+  </div>
 </body>
 </html>

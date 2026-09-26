@@ -1,14 +1,9 @@
-<p align="center">
-  <img src="docs/images/icon.png" alt="Sayso App Icon" width="120" height="120">
-</p>
-
 # Sayso
 
-Speak at the Mac notch. The named app opens — and the Mac itself obeys: volume, brightness, dark mode, lock, battery, AirDrop.
+Speak to Mac. The named app opens — and the Mac itself obeys: volume, brightness, dark mode, lock, battery, AirDrop.
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/dbc060cc-c95d-4a75-a530-bd5b26a18cd3"
- alt="Sayso — the real notch island after saying 'open notes': Notes app icon, OPENED, Notes" width="840">
+  <img src="docs/images/hero.png" alt="Sayso — the real notch island after saying 'open notes': Notes app icon, OPENED, Notes" width="840">
 </p>
 
 Hover the purple dot, press **⌃⌥Space**, or say **Hey Mac**. A black island drops. You talk. Laya — running **on this Mac, in Docker, no internet** — picks the installed app. Sayso opens it, closes its windows, or quits it.
