@@ -1,0 +1,314 @@
+"""Installed-app catalog. Criterion wording is the Laya model — keep it concrete."""
+
+from pathlib import Path
+
+from opener.defaults import default_browser_id, read_launch_services_handlers
+from opener.scan import merge_scanned, scan_apps
+
+
+# Candidate .app paths, first existing wins. Criteria tuned against laya-upstream.
+APPS = {
+    "safari": {
+        "open": "Safari",
+        "say": "Safari",
+        "bundle": "com.apple.Safari",
+        "paths": [
+            "/Applications/Safari.app",
+            "/System/Cryptexes/App/System/Applications/Safari.app",
+            "/System/Applications/Safari.app",
+        ],
+        "aliases": ["safari"],
+        "criteria": "Safari.app. The word safari, or Apple's own browser when no other browser is named.",
+    },
+    "chrome": {
+        "open": "Google Chrome",
+        "say": "Chrome",
+        "bundle": "com.google.Chrome",
+        "paths": ["/Applications/Google Chrome.app"],
+        "aliases": ["chrome", "google chrome"],
+        "criteria": "Google Chrome.app. The words chrome or google chrome.",
+    },
+    "arc": {
+        "open": "Arc",
+        "say": "Arc",
+        "bundle": "company.thebrowser.Browser",
+        "paths": ["/Applications/Arc.app"],
+        "aliases": ["arc", "ark", "art", "arc browser"],
+        "criteria": "Arc browser. arc, ark, art as the browser name Arc",
+    },
+    "brave": {
+        "open": "Brave Browser",
+        "say": "Brave",
+        "bundle": "com.brave.Browser",
+        "paths": ["/Applications/Brave Browser.app"],
+        "aliases": ["brave"],
+        "criteria": "Brave Browser.app. The word brave as a browser name.",
+    },
+    "mail": {
+        "open": "Mail",
+        "say": "Mail",
+        "bundle": "com.apple.mail",
+        "paths": ["/System/Applications/Mail.app"],
+        "aliases": ["mail", "email", "e-mail", "inbox"],
+        "criteria": "Mail.app. Email inbox, compose a message, send an email, or the word mail.",
+    },
+    "messages": {
+        "open": "Messages",
+        "say": "Messages",
+        "bundle": "com.apple.MobileSMS",
+        "paths": ["/System/Applications/Messages.app"],
+        "aliases": ["messages", "imessage", "i message"],
+        "criteria": "Messages.app. iMessage, SMS, or the word messages. Not WhatsApp.",
+    },
+    "notes": {
+        "open": "Notes",
+        "say": "Notes",
+        "bundle": "com.apple.Notes",
+        "paths": ["/System/Applications/Notes.app"],
+        "aliases": ["notes", "note"],
+        "criteria": "Notes.app. Apple Notes, jot something down, write a note, or the word notes.",
+    },
+    "reminders": {
+        "open": "Reminders",
+        "say": "Reminders",
+        "bundle": "com.apple.reminders",
+        "paths": ["/System/Applications/Reminders.app"],
+        "aliases": ["reminders", "reminder", "to do", "todo", "to-do"],
+        "criteria": "Reminders.app. A to-do, reminder, or the word reminders.",
+    },
+    "calendar": {
+        "open": "Calendar",
+        "say": "Calendar",
+        "bundle": "com.apple.iCal",
+        "paths": ["/System/Applications/Calendar.app"],
+        "aliases": ["calendar"],
+        "criteria": "the word calendar, show my calendar",
+    },
+    "spotify": {
+        "open": "Spotify",
+        "say": "Spotify",
+        "bundle": "com.spotify.client",
+        "paths": ["/Applications/Spotify.app"],
+        "aliases": ["spotify"],
+        "criteria": "Spotify.app. The word spotify, a spotify playlist, or spotify music.",
+    },
+    "music": {
+        "open": "Music",
+        "say": "Music",
+        "bundle": "com.apple.Music",
+        "paths": ["/System/Applications/Music.app"],
+        "aliases": ["apple music"],
+        "criteria": "Music.app. Apple Music specifically. Not spotify.",
+    },
+    "vscode": {
+        "open": "Visual Studio Code",
+        "say": "VS Code",
+        "bundle": "com.microsoft.VSCode",
+        "paths": ["/Applications/Visual Studio Code.app"],
+        "aliases": ["vscode", "vs code", "visual studio code"],
+        "criteria": "vs code, vscode, visual studio code",
+    },
+    "hermes": {
+        "open": "Hermes",
+        "say": "Hermes",
+        "bundle": "com.nousresearch.hermes",
+        "paths": ["/Applications/Hermes.app"],
+        "aliases": ["hermes", "her mes", "her mess", "hermits", "hurmez"],
+        "criteria": "Hermes.app. The word hermes, her mess, or hermits as the desktop chat app.",
+    },
+    "finder": {
+        "open": "Finder",
+        "say": "Finder",
+        "bundle": "com.apple.finder",
+        "paths": ["/System/Library/CoreServices/Finder.app"],
+        "aliases": ["finder", "files", "file explorer"],
+        "criteria": "Finder.app. Files, folders, or the word finder.",
+    },
+    "settings": {
+        "open": "System Settings",
+        "say": "System Settings",
+        "bundle": "com.apple.systempreferences",
+        "paths": ["/System/Applications/System Settings.app"],
+        "aliases": ["system settings", "system preferences", "settings"],
+        "criteria": "System Settings.app. system settings, system preferences, or mac settings. Not safari.",
+    },
+    "photos": {
+        "open": "Photos",
+        "say": "Photos",
+        "bundle": "com.apple.Photos",
+        "paths": ["/System/Applications/Photos.app"],
+        "aliases": ["photos"],
+        "criteria": "Photos.app. Apple photo library or the word photos as the app.",
+    },
+    "whatsapp": {
+        "open": "WhatsApp",
+        "say": "WhatsApp",
+        "bundle": "net.whatsapp.WhatsApp",
+        "paths": ["/Applications/WhatsApp.app"],
+        "aliases": ["whatsapp", "what's app", "whats app"],
+        "criteria": "WhatsApp.app. The word whatsapp or wa.me.",
+    },
+    "docker": {
+        "open": "Docker",
+        "say": "Docker",
+        "bundle": "com.docker.docker",
+        "paths": ["/Applications/Docker.app"],
+        "aliases": ["docker", "docker desktop"],
+        "criteria": "Docker Desktop.app. The word docker.",
+    },
+    "maps": {
+        "open": "Maps",
+        "say": "Maps",
+        "bundle": "com.apple.Maps",
+        "paths": ["/System/Applications/Maps.app"],
+        "aliases": ["maps", "apple maps"],
+        "criteria": "Maps.app. Apple Maps, directions, or the word maps.",
+    },
+    "facetime": {
+        "open": "FaceTime",
+        "say": "FaceTime",
+        "bundle": "com.apple.FaceTime",
+        "paths": ["/System/Applications/FaceTime.app"],
+        "aliases": ["facetime", "face time"],
+        "criteria": "FaceTime.app. The word facetime or a video call in FaceTime.",
+    },
+    "claude": {
+        "open": "Claude",
+        "say": "Claude",
+        "bundle": "com.anthropic.claudefordesktop",
+        "paths": ["/Applications/Claude.app"],
+        "aliases": ["claude"],
+        "criteria": "the word claude only",
+    },
+    "codex": {
+        "open": "Codex",
+        "say": "Codex",
+        "bundle": "com.openai.codex",
+        "paths": ["/Applications/Codex.app"],
+        "aliases": ["codex"],
+        "criteria": "the word codex only",
+    },
+    "preview": {
+        "open": "Preview",
+        "say": "Preview",
+        "bundle": "com.apple.Preview",
+        "paths": ["/System/Applications/Preview.app"],
+        "aliases": ["preview"],
+        "criteria": "the word preview only",
+    },
+    "calculator": {
+        "open": "Calculator",
+        "say": "Calculator",
+        "bundle": "com.apple.calculator",
+        "paths": ["/System/Applications/Calculator.app"],
+        "aliases": ["calculator"],
+        "criteria": "the word calculator only",
+    },
+    "terminal": {
+        "open": "Terminal",
+        "say": "Terminal",
+        "bundle": "com.apple.Terminal",
+        "paths": ["/System/Applications/Utilities/Terminal.app"],
+        "aliases": ["terminal"],
+        "criteria": "the word terminal only",
+    },
+    "vlc": {
+        "open": "VLC",
+        "say": "VLC",
+        "bundle": "org.videolan.vlc",
+        "paths": ["/Applications/VLC.app"],
+        "aliases": ["vlc"],
+        "criteria": "the word vlc only",
+    },
+    "cloudflarewarp": {
+        "open": "Cloudflare WARP",
+        "say": "Cloudflare WARP",
+        "bundle": "com.cloudflare.1dot1dot1dot1.macos",
+        "paths": ["/Applications/Cloudflare WARP.app"],
+        "aliases": [
+            "cloudflare warp",
+            "cloudflarewarp",
+            "cloudflare",
+            "cloud flare",
+            "cloud flare warp",
+            "warp",
+        ],
+        "criteria": "Cloudflare WARP.app. The words cloudflare, cloud flare, or warp as the VPN app.",
+    },
+    "vivaldi": {
+        "open": "Vivaldi",
+        "say": "Vivaldi",
+        "bundle": "com.vivaldi.Vivaldi",
+        "paths": ["/Applications/Vivaldi.app"],
+        "aliases": ["vivaldi"],
+        "criteria": "the word vivaldi only",
+    },
+    "word": {
+        "open": "Microsoft Word",
+        "say": "Word",
+        "bundle": "com.microsoft.Word",
+        "paths": ["/Applications/Microsoft Word.app"],
+        "aliases": ["word", "microsoft word"],
+        "criteria": "microsoft word, the word word as the app",
+    },
+    "excel": {
+        "open": "Microsoft Excel",
+        "say": "Excel",
+        "bundle": "com.microsoft.Excel",
+        "paths": ["/Applications/Microsoft Excel.app"],
+        "aliases": ["excel", "microsoft excel"],
+        "criteria": "the word excel only",
+    },
+    "tv": {
+        "open": "TV",
+        "say": "TV",
+        "bundle": "com.apple.TV",
+        "paths": ["/System/Applications/TV.app"],
+        "aliases": ["tv", "apple tv", "appletv"],
+        "criteria": "apple tv, the tv app",
+    },
+    "textedit": {
+        "open": "TextEdit",
+        "say": "TextEdit",
+        "bundle": "com.apple.TextEdit",
+        "paths": ["/System/Applications/TextEdit.app"],
+        "aliases": ["textedit", "text edit", "text editor"],
+        "criteria": "textedit, text editor",
+    },
+}
+
+LAYA_URL = "http://127.0.0.1:8001/v1/systemone"
+
+
+def installed(apps=None, exists=None, scanned=None):
+    exists = exists or (lambda p: Path(p).exists())
+    out = {}
+    for app_id, spec in (apps or APPS).items():
+        for path in spec.get("paths") or []:
+            if exists(path):
+                item = dict(spec)
+                item["path"] = path
+                out[app_id] = item
+                break
+    if scanned is None:
+        if apps is None:
+            try:
+                scanned = scan_apps()
+            except OSError:
+                scanned = {}
+        else:
+            scanned = {}
+    return merge_scanned(out, scanned)
+
+
+def defaults_for(catalog=None, handlers=None):
+    catalog = catalog if catalog is not None else installed()
+    if handlers is None:
+        handlers = read_launch_services_handlers()
+    browser = default_browser_id(handlers, catalog)
+    return {
+        "browser": browser if browser in catalog else "safari",
+        "mail": "mail" if "mail" in catalog else None,
+        "music": "spotify" if "spotify" in catalog else ("music" if "music" in catalog else None),
+        "editor": "vscode" if "vscode" in catalog else None,
+    }

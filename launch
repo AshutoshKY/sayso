@@ -1,0 +1,44 @@
+#!/bin/zsh
+# Bring up THIS project's Docker stack, then open the notch companion.
+set -euo pipefail
+root="$(cd "$(dirname "$0")" && pwd)"
+cd "$root"
+
+if ! docker info >/dev/null 2>&1; then
+  echo "Docker Desktop is not running. Open it, then run ./launch again."
+  open -a Docker || true
+  exit 2
+fi
+
+if docker inspect laya-upstream >/dev/null 2>&1; then
+  docker compose up -d --build --no-deps opener
+else
+  docker compose up -d --build
+fi
+
+echo "waiting for laya-opener on 127.0.0.1:8010 …"
+for i in {1..60}; do
+  if curl -fsS http://127.0.0.1:8010/health >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+if ! curl -fsS http://127.0.0.1:8010/health >/dev/null 2>&1; then
+  echo "laya-opener did not become healthy. docker compose ps:"
+  docker compose ps
+  exit 2
+fi
+
+app="$HOME/Applications/LayaOpener.app"
+if [[ ! -x "$app/Contents/MacOS/LayaOpener" ]]; then
+  app="$root/dist/LayaOpener.app"
+fi
+if [[ ! -x "$app/Contents/MacOS/LayaOpener" ]]; then
+  "$root/scripts/build_app.sh"
+  app="$HOME/Applications/LayaOpener.app"
+fi
+open "$app"
+echo "stack:"
+docker compose ps
+echo "Laya Opener is in the notch. Click it, or press Control-Option-Space."

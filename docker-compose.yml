@@ -1,0 +1,75 @@
+# This project's stack. Inference is laya-upstream. The decide API is laya-opener.
+# The Mac notch app only listens and runs `open -a` — it does not run Laya locally.
+#
+#   docker compose up -d
+#   docker compose ps
+#
+name: laya-app-opener
+
+services:
+  laya:
+    image: laya-upstream:latest
+    container_name: laya-upstream
+    command: ["laya-serve"]
+    ports:
+      - "127.0.0.1:8001:8001"
+    environment:
+      HF_HUB_OFFLINE: "1"
+      OMP_NUM_THREADS: "4"
+      LAYA_HOST: "0.0.0.0"
+      LAYA_PORT: "8001"
+      LAYA_DEVICE: "cpu"
+      LAYA_PRELOAD: "1"
+      LAYA_MODELS: "english"
+      LAYA_LOG_LEVEL: "info"
+      TORCH_DISABLE_NATIVE_JIT: "1"
+      HF_HOME: /home/laya/.cache/huggingface
+    volumes:
+      - laya-upstream-model-cache:/home/laya/.cache/huggingface
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+os.environ['LAYA_PORT']+'/health', timeout=4)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 3m
+
+  opener:
+    build: .
+    image: laya-app-opener:latest
+    container_name: laya-opener
+    ports:
+      - "127.0.0.1:8010:8010"
+    environment:
+      LAYA_URL: http://host.docker.internal:8001/v1/systemone
+      LAYA_HEALTH: http://host.docker.internal:8001/health
+      OPENER_HOST: "0.0.0.0"
+      OPENER_PORT: "8010"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - laya
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health', timeout=4)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    stop_grace_period: 5s
+
+volumes:
+  laya-upstream-model-cache:
+    name: laya-upstream-model-cache

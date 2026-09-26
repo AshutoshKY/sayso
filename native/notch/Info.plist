@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>LayaOpener</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.laya.opener</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Laya Opener</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>9</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Laya Opener listens so you can open apps by speaking.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Laya Opener uses speech recognition to hear which app you want to open.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Laya Opener listens so you can open apps by speaking.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Laya Opener closes app windows when you ask it to.</string>
+</dict>
+</plist>

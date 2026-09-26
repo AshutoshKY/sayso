@@ -1,0 +1,81 @@
+#!/bin/zsh
+set -euo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$root"
+
+python3 - << 'PY'
+import json, sys
+sys.path.insert(0, ".")
+from opener.catalog import APPS, LAYA_URL
+from opener.policy import DEFAULT_THRESHOLDS
+payload = {
+    "laya_url": LAYA_URL,
+    "opener_url": "http://127.0.0.1:8010/decide",
+    "opener_health": "http://127.0.0.1:8010/health",
+    "container": "laya-opener",
+    "laya_container": "laya-upstream",
+    "thresholds": DEFAULT_THRESHOLDS,
+    "intent": {
+        "launch": "user wants a macOS application launched or brought to the front right now",
+        "chat": "greeting, thanks, small talk, weather, or a question that does not launch software",
+        "refuse": "user does not want any app opened: don't, never, hate",
+    },
+    "unspecified": "no named app matches; a generic request; or the target is not in this list.",
+    "apps": APPS,
+}
+with open("catalog.json", "w") as f:
+    json.dump(payload, f, indent=2)
+    f.write("\n")
+PY
+
+app="$root/dist/LayaOpener.app"
+rm -rf "$app"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+cp "$root/native/notch/Info.plist" "$app/Contents/Info.plist"
+cp "$root/catalog.json" "$app/Contents/Resources/catalog.json"
+
+sdk="$(xcrun --show-sdk-path)"
+objc="$root/dist/ExceptionCatch.o"
+clang -c -fobjc-arc -isysroot "$sdk" -target arm64-apple-macos14.0 \
+  -o "$objc" "$root/native/notch/ExceptionCatch.m"
+swiftc -O -parse-as-library \
+  -target arm64-apple-macos14.0 \
+  -sdk "$sdk" \
+  -import-objc-header "$root/native/notch/ExceptionCatch.h" \
+  -framework AppKit -framework SwiftUI -framework Speech \
+  -framework AVFoundation -framework Carbon -framework Foundation \
+  -framework ApplicationServices \
+  "$root/native/notch/Engine.swift" \
+  "$root/native/notch/Settings.swift" \
+  "$root/native/notch/SpeechListen.swift" \
+  "$root/native/notch/NotchApp.swift" \
+  "$objc" \
+  -o "$app/Contents/MacOS/LayaOpener"
+
+# Stable identity so TCC (mic/speech) survives rebuilds and restarts.
+identity="-"
+keychain=""
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "Apple Development"; then
+  identity="$(security find-identity -v -p codesigning | awk -F'\"' '/Apple Development/{print $2; exit}')"
+else
+  pair="$("$root/scripts/ensure_codesign.sh")"
+  keychain="${pair%%|*}"
+  identity="${pair##*|}"
+  security unlock-keychain -p "laya-opener-codesign" "$keychain" >/dev/null
+  security list-keychains -d user | grep -q "$keychain" || security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+fi
+sign=(codesign --force --deep --sign "$identity")
+if [[ -n "$keychain" ]]; then
+  sign+=(--keychain "$keychain")
+fi
+"${sign[@]}" "$app"
+
+# Same path every time so macOS can keep mic/speech grants.
+stable="$HOME/Applications/LayaOpener.app"
+mkdir -p "$HOME/Applications"
+rm -rf "$stable"
+ditto "$app" "$stable"
+"${sign[@]}" "$stable"
+echo "built $app"
+echo "installed $stable"
+echo "signed $identity"
