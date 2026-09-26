@@ -3,24 +3,10 @@
 Speak at the Mac notch. The named app opens.
 
 <p align="center">
-  <img src="docs/images/claude-64.png" alt="Claude.app" width="72" height="72">
+  <img src="docs/images/island-ui.png" alt="Sayso island after opening Claude — black notch island, Claude icon, OPENED, Claude" width="820">
 </p>
 
-<p align="center"><sub>After <em>open claude</em> the island shows this icon — not a generic checkmark.</sub></p>
-
-<p align="center">
-  <img src="docs/images/claude-64.png" alt="Claude" width="28" height="28">
-  &nbsp;
-  <img src="docs/images/notes-64.png" alt="Notes" width="28" height="28">
-  &nbsp;
-  <img src="docs/images/hermes-64.png" alt="Hermes" width="28" height="28">
-  &nbsp;
-  <img src="docs/images/antigravity-64.png" alt="Antigravity" width="28" height="28">
-  &nbsp;
-  <sub>the island shows the real app icon</sub>
-</p>
-
-Hover the purple dot, press **⌃⌥Space**, or say **Hey Mac**. A black island drops. You talk. Laya — running **on this Mac, in Docker, no internet** — picks the installed app. Sayso opens it, closes its windows, or quits it. On success the island shows that app’s icon — Claude, Notes, Hermes, whoever you named.
+Hover the purple dot, press **⌃⌥Space**, or say **Hey Mac**. A black island drops. You talk. Laya — running **on this Mac, in Docker, no internet** — picks the installed app. Sayso opens it, closes its windows, or quits it.
 
 > **No cloud LLM.** Not ChatGPT. Not Claude. Not Gemini. Speech is Apple Speech. The decision is Laya System-1 on CPU. Once the image is loaded, the stack is offline.
 
@@ -59,18 +45,6 @@ You  →  notch island  →  POST :8010/decide     (laya-opener, this repo)
 | *goodbye* | Island says goodbye and Sayso quits |
 
 Unknown name → nothing. No silent fallthrough to Chrome or Calendar.
-
-<p align="center">
-  <img src="docs/images/claude-64.png" alt="Claude" width="48" height="48">
-  &nbsp;&nbsp;
-  <img src="docs/images/notes-64.png" alt="Notes" width="48" height="48">
-  &nbsp;&nbsp;
-  <img src="docs/images/hermes-64.png" alt="Hermes" width="48" height="48">
-  &nbsp;&nbsp;
-  <img src="docs/images/antigravity-64.png" alt="Antigravity" width="48" height="48">
-</p>
-
-<p align="center"><sub>Success state = the opened app’s real macOS icon (Claude, Notes, Hermes, Antigravity, …).</sub></p>
 
 <p align="center">
   <img src="docs/images/flow.svg" alt="Four-step flow: you speak, island hears, Laya decides, Mac does it" width="900">
