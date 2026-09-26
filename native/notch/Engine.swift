@@ -1,6 +1,10 @@
 import AppKit
 import ApplicationServices
+import CoreAudio
+import Darwin
 import Foundation
+import IOKit.ps
+import ObjectiveC
 
 struct Thresholds: Codable {
     var intent: Double
@@ -33,6 +37,11 @@ struct LayaHead {
     var confidence: Double
 }
 
+struct SystemCommand {
+    var verb: String
+    var value: Double?
+}
+
 struct Decision {
     var action: String
     var app: String?
@@ -40,6 +49,7 @@ struct Decision {
     var apps: [String] = []
     var pending: [String] = []
     var url: String?
+    var system: [SystemCommand] = []
 }
 
 enum Engine {
@@ -455,6 +465,12 @@ enum Engine {
             "github", "github.com",
             "gmail", "chatgpt", "clipboard",
             "reddit", "twitter",
+            // System controls — bias the recognizer toward these phrasings.
+            "volume up", "volume down", "mute", "unmute",
+            "brightness up", "brightness down",
+            "dark mode", "light mode", "night shift",
+            "lock screen", "battery", "wifi settings",
+            "bluetooth settings", "airdrop",
         ]
         var out = scored.prefix(max(0, limit - extras.count)).map(\.2)
         var used = Set(out.map { $0.lowercased() })
@@ -562,25 +578,33 @@ enum Engine {
 
     static func spoken(_ decision: Decision, catalog: CatalogFile) -> String {
         let ids = decision.apps.isEmpty ? [decision.app].compactMap { $0 } : decision.apps
+        let sysSuffix = decision.system
+            .map { systemLabel($0) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        var line: String
         switch decision.action {
         case "open_url":
             if decision.url == "clipboard" {
                 if let app = decision.app, !app.isEmpty {
-                    return "Opening the clipboard in \(spokenNames([app], catalog: catalog))."
+                    line = "Opening the clipboard in \(spokenNames([app], catalog: catalog))."
+                } else {
+                    line = "Opening the clipboard."
                 }
-                return "Opening the clipboard."
+            } else {
+                let site = siteLabel(decision.url)
+                if let app = decision.app, !app.isEmpty {
+                    line = "Opening \(site) in \(spokenNames([app], catalog: catalog))."
+                } else {
+                    line = "Opening \(site)."
+                }
             }
-            let site = siteLabel(decision.url)
-            if let app = decision.app, !app.isEmpty {
-                return "Opening \(site) in \(spokenNames([app], catalog: catalog))."
-            }
-            return "Opening \(site)."
         case "open":
-            return "Opening \(spokenNames(ids, catalog: catalog))."
+            line = "Opening \(spokenNames(ids, catalog: catalog))."
         case "close", "quit", "kill":
             let verb = decision.action == "close" ? "Closed"
                 : decision.action == "quit" ? "Quit" : "Force quit"
-            var line = "\(verb) \(spokenNames(ids, catalog: catalog))."
+            line = "\(verb) \(spokenNames(ids, catalog: catalog))."
             if !decision.pending.isEmpty {
                 line += " \(spokenNames(decision.pending, catalog: catalog, fallback: "that app")) isn't open. Open it?"
             }
@@ -596,9 +620,13 @@ enum Engine {
             return "Which app should I open?"
         case "stop":
             return "Goodbye."
+        case "system":
+            return sysSuffix.isEmpty ? "Done." : sysSuffix
         default:
             return "I open apps. Try saying open notes, or open the browser."
         }
+        if !sysSuffix.isEmpty { line += " " + sysSuffix }
+        return line
     }
 
     static func siteLabel(_ raw: String?) -> String {
@@ -950,13 +978,375 @@ enum Engine {
         let opened = payload["apps"] as? [String] ?? []
         let waiting = payload["pending"] as? [String] ?? []
         let page = payload["url"] as? String
+        var commands: [SystemCommand] = []
+        for item in payload["system"] as? [[String: Any]] ?? [] {
+            guard let verb = item["verb"] as? String, !verb.isEmpty else { continue }
+            commands.append(SystemCommand(verb: verb, value: (item["value"] as? NSNumber)?.doubleValue))
+        }
         return Decision(
             action: action,
             app: app,
             reason: payload["reason"] as? String ?? "laya",
             apps: opened.isEmpty ? (app.map { [$0] } ?? []) : opened,
             pending: waiting,
-            url: page
+            url: page,
+            system: commands
         )
+    }
+
+    // MARK: - System controls (volume, brightness, appearance, lock, battery, panes)
+
+    /// Mirrors opener/system_cmd.py GATE_WORDS: used to suppress partial-fire.
+    static let systemWords = [
+        "volume", "sound", "speaker", "audio", "louder", "quieter", "softer",
+        "mute", "brightness", "brighter", "brighten", "dimmer", "dim", "backlight",
+        "dark mode", "light mode", "night mode", "night shift", "nightshift",
+        "lock", "battery", "charging", "charge", "juice",
+        "wifi", "wi-fi", "bluetooth", "airdrop", "air drop",
+    ]
+
+    static func looksSystemish(_ text: String) -> Bool {
+        let lowered = text.lowercased()
+        return systemWords.contains { lowered.contains($0) }
+    }
+
+    /// Lockstep with opener/system_cmd.py label().
+    static func systemLabel(_ command: SystemCommand) -> String {
+        var pct = ""
+        if let value = command.value {
+            pct = " \(Int((value * 100).rounded()))%"
+        }
+        switch command.verb {
+        case "volume_up": return "Volume up\(pct)."
+        case "volume_down": return "Volume down\(pct)."
+        case "volume_set": return "Volume set to\(pct)."
+        case "volume_mute": return "Muted."
+        case "volume_unmute": return "Unmuted."
+        case "brightness_up": return "Brightness up\(pct)."
+        case "brightness_down": return "Brightness down\(pct)."
+        case "brightness_set": return "Brightness set to\(pct)."
+        case "dark_mode": return "Dark mode on."
+        case "light_mode": return "Light mode on."
+        case "night_shift_on": return "Night Shift on."
+        case "night_shift_off": return "Night Shift off."
+        case "lock_screen": return "Locking the screen."
+        case "battery": return "Checking the battery."
+        case "wifi_settings": return "Opening Wi-Fi settings."
+        case "bluetooth_settings": return "Opening Bluetooth settings."
+        case "airdrop_off": return "AirDrop off."
+        case "airdrop_on": return "AirDrop on, contacts only."
+        case "airdrop_contacts": return "AirDrop on, contacts only."
+        case "airdrop_everyone": return "AirDrop on for everyone."
+        default: return ""
+        }
+    }
+
+    /// Execute one system command on this Mac; returns the caption line.
+    static func runSystem(_ command: SystemCommand) -> String {
+        switch command.verb {
+        case "volume_up", "volume_down", "volume_set", "volume_mute", "volume_unmute":
+            return runVolume(command.verb, command.value)
+        case "brightness_up", "brightness_down", "brightness_set":
+            return runBrightness(command.verb, command.value)
+        case "dark_mode":
+            return setDarkMode(true)
+                ? "Dark mode on."
+                : "Couldn't switch — allow System Events in Settings › Privacy & Security › Automation."
+        case "light_mode":
+            return setDarkMode(false)
+                ? "Light mode on."
+                : "Couldn't switch — allow System Events in Settings › Privacy & Security › Automation."
+        case "night_shift_on":
+            return setNightShift(true) ? "Night Shift on." : "Night Shift isn't available on this Mac."
+        case "night_shift_off":
+            return setNightShift(false) ? "Night Shift off." : "Night Shift isn't available on this Mac."
+        case "lock_screen":
+            _ = lockScreen()
+            return "Locking the screen."
+        case "battery":
+            let line = batteryLine()
+            speak(line)
+            return line
+        case "wifi_settings":
+            if let url = URL(string: "x-apple.systempreferences:com.apple.wifi") {
+                NSWorkspace.shared.open(url)
+            }
+            return "Opening Wi-Fi settings."
+        case "bluetooth_settings":
+            if let url = URL(string: "x-apple.systempreferences:com.apple.Bluetooth") {
+                NSWorkspace.shared.open(url)
+            }
+            return "Opening Bluetooth settings."
+        case "airdrop_off", "airdrop_on", "airdrop_contacts", "airdrop_everyone":
+            return setAirDrop(command.verb)
+        default:
+            return ""
+        }
+    }
+
+    // MARK: Volume (CoreAudio — works even when the output is HDMI/DisplayPort)
+
+    static func defaultOutputDevice() -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var device = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let err = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device
+        )
+        return err == noErr && device != AudioDeviceID(0) ? device : nil
+    }
+
+    static func audioAddress(
+        _ device: AudioDeviceID,
+        selector: AudioObjectPropertySelector
+    ) -> AudioObjectPropertyAddress {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        if !AudioObjectHasProperty(device, &address) {
+            address.mElement = 1
+        }
+        return address
+    }
+
+    static func outputVolume() -> (level: Float, muted: Bool)? {
+        guard let device = defaultOutputDevice() else { return nil }
+        var address = audioAddress(device, selector: kAudioDevicePropertyVolumeScalar)
+        guard AudioObjectHasProperty(device, &address) else { return nil }
+        var level = Float(0)
+        var size = UInt32(MemoryLayout<Float>.size)
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &level) == noErr else { return nil }
+        var muteAddress = audioAddress(device, selector: kAudioDevicePropertyMute)
+        var muted: UInt32 = 0
+        var muteSize = UInt32(MemoryLayout<UInt32>.size)
+        let isMuted = AudioObjectGetPropertyData(device, &muteAddress, 0, nil, &muteSize, &muted) == noErr && muted != 0
+        return (level, isMuted)
+    }
+
+    @discardableResult
+    static func setOutputMuted(_ muted: Bool) -> Bool {
+        guard let device = defaultOutputDevice() else { return false }
+        var address = audioAddress(device, selector: kAudioDevicePropertyMute)
+        guard AudioObjectHasProperty(device, &address) else { return false }
+        var value: UInt32 = muted ? 1 : 0
+        return AudioObjectSetPropertyData(device, &address, 0, nil, UInt32(MemoryLayout<UInt32>.size), &value) == noErr
+    }
+
+    @discardableResult
+    static func setOutputVolume(_ level: Float) -> Bool {
+        guard let device = defaultOutputDevice() else { return false }
+        for element in [kAudioObjectPropertyElementMain, 1, 2] as [UInt32] {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyVolumeScalar,
+                mScope: kAudioDevicePropertyScopeOutput,
+                mElement: element
+            )
+            guard AudioObjectHasProperty(device, &address) else { continue }
+            var settable = DarwinBoolean(false)
+            guard AudioObjectIsPropertySettable(device, &address, &settable) == noErr, settable.boolValue else { continue }
+            var value = level
+            if AudioObjectSetPropertyData(device, &address, 0, nil, UInt32(MemoryLayout<Float>.size), &value) == noErr {
+                return true
+            }
+        }
+        return false
+    }
+
+    static func runVolume(_ verb: String, _ value: Double?) -> String {
+        switch verb {
+        case "volume_mute":
+            return setOutputMuted(true) ? "Muted." : "This output can't be muted."
+        case "volume_unmute":
+            return setOutputMuted(false) ? "Unmuted." : "This output can't be unmuted."
+        default:
+            break
+        }
+        guard let current = outputVolume() else {
+            return "This output has no software volume."
+        }
+        let step = Float(value ?? 0.1)
+        let next: Float
+        switch verb {
+        case "volume_up": next = current.level + step
+        case "volume_down": next = current.level - step
+        default: next = step
+        }
+        let clamped = max(0, min(1, next))
+        guard setOutputVolume(clamped) else {
+            return "This output has no software volume."
+        }
+        if current.muted { _ = setOutputMuted(false) }
+        return "Volume \(Int((clamped * 100).rounded()))%."
+    }
+
+    // MARK: Brightness (DisplayServices private API, same one the F1/F2 keys use)
+
+    // macOS 26 signature (verified by disassembly): the GET takes an out-pointer
+    // and returns 0 on success / 1000 on failure — NOT a float return.
+    static let displayServicesGet: (@convention(c) (CGDirectDisplayID, UnsafeMutablePointer<Float>) -> Int32)? = {
+        guard let handle = dlopen(
+            "/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices", RTLD_NOW
+        ),
+            let sym = dlsym(handle, "DisplayServicesGetBrightness")
+        else { return nil }
+        return unsafeBitCast(sym, to: (@convention(c) (CGDirectDisplayID, UnsafeMutablePointer<Float>) -> Int32).self)
+    }()
+
+    static let displayServicesSet: (@convention(c) (CGDirectDisplayID, Float) -> Int32)? = {
+        guard let handle = dlopen(
+            "/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices", RTLD_NOW
+        ),
+            let sym = dlsym(handle, "DisplayServicesSetBrightness")
+        else { return nil }
+        return unsafeBitCast(sym, to: (@convention(c) (CGDirectDisplayID, Float) -> Int32).self)
+    }()
+
+    static func mainDisplay() -> CGDirectDisplayID {
+        if let screen = NSScreen.main,
+           let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+        {
+            return CGDirectDisplayID(number.uint32Value)
+        }
+        return CGMainDisplayID()
+    }
+
+    static func getBrightness(_ display: CGDirectDisplayID) -> Float? {
+        guard let get = displayServicesGet else { return nil }
+        var value = Float(0)
+        return get(display, &value) == 0 ? value : nil
+    }
+
+    static func runBrightness(_ verb: String, _ value: Double?) -> String {
+        guard let set = displayServicesSet, let current = getBrightness(mainDisplay()) else {
+            return "Brightness control isn't available on this Mac."
+        }
+        let step = Float(value ?? 0.1)
+        let next: Float
+        switch verb {
+        case "brightness_up": next = current + step
+        case "brightness_down": next = current - step
+        default: next = step
+        }
+        let clamped = max(Float(0.0), min(1, next))
+        guard set(mainDisplay(), clamped) == 0 else {
+            return "Couldn't set brightness on this display."
+        }
+        return "Brightness \(Int((clamped * 100).rounded()))%."
+    }
+
+    // MARK: Appearance / Night Shift / Lock
+
+    /// One-time Automation consent for System Events, then instant.
+    static func setDarkMode(_ dark: Bool) -> Bool {
+        let source = "tell application \"System Events\" to tell appearance preferences to set dark mode to \(dark ? "true" : "false")"
+        var error: NSDictionary?
+        guard let script = NSAppleScript(source: source) else { return false }
+        script.executeAndReturnError(&error)
+        if let error {
+            NSLog("laya-opener appearance script failed: %@", error)
+            return false
+        }
+        return true
+    }
+
+    static func setNightShift(_ on: Bool) -> Bool {
+        if let bundle = Bundle(path: "/System/Library/PrivateFrameworks/CoreBrightness.framework"),
+           !bundle.isLoaded
+        {
+            bundle.load()
+        }
+        guard let cls = NSClassFromString("CBBlueLightClient") as? NSObject.Type else { return false }
+        let client = cls.init()
+        let selector = NSSelectorFromString("setEnabled:")
+        guard let method = class_getInstanceMethod(type(of: client), selector) else { return false }
+        typealias SetEnabled = @convention(c) (AnyObject, Selector, Bool) -> Bool
+        let call = unsafeBitCast(method_getImplementation(method), to: SetEnabled.self)
+        return call(client, selector, on)
+    }
+
+    /// Lock via a synthetic ⌃⌘Q (the system Lock Screen shortcut). The app is
+    /// Accessibility-trusted, so CGEvent posting works with no prompt. SACLockScreenImmediate
+    /// and the CGSession menu extra are both gone on macOS 26. Last resort: display sleep.
+    static func lockScreen() -> Bool {
+        let source = CGEventSource(stateID: .hidSystemState)
+        let q = CGKeyCode(12)  // kVK_Q
+        if let down = CGEvent(keyboardEventSource: source, virtualKey: q, keyDown: true),
+           let up = CGEvent(keyboardEventSource: source, virtualKey: q, keyDown: false)
+        {
+            down.flags = [.maskControl, .maskCommand]
+            up.flags = [.maskControl, .maskCommand]
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+            return true
+        }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+        task.arguments = ["displaysleepnow"]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        try? task.run()
+        return true
+    }
+
+    // MARK: Battery
+
+    static func batteryLine() -> String {
+        let snapshot = IOPSCopyPowerSourcesInfo().takeRetainedValue()
+        guard let list = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [CFTypeRef] else {
+            return "Couldn't read the battery."
+        }
+        for source in list {
+            guard let info = IOPSGetPowerSourceDescription(snapshot, source)?.takeUnretainedValue() as? [String: Any],
+                  (info[kIOPSTypeKey] as? String) == kIOPSInternalBatteryType
+            else { continue }
+            let current = info[kIOPSCurrentCapacityKey] as? Int ?? 0
+            let maximum = info[kIOPSMaxCapacityKey] as? Int ?? 0
+            let pct = maximum > 0 && maximum != 100
+                ? Int((Double(current) / Double(maximum) * 100).rounded())
+                : current
+            var line = "Battery \(pct)%"
+            if info[kIOPSIsChargingKey] as? Bool == true {
+                line += ", charging"
+            } else if (info["Power Source State"] as? String) == "AC Power" {
+                line += ", plugged in"
+            }
+            return line + "."
+        }
+        return "This Mac has no battery."
+    }
+
+    // MARK: AirDrop (sharingd discoverability mode)
+
+    static func setAirDrop(_ verb: String) -> String {
+        let mode: String
+        let line: String
+        switch verb {
+        case "airdrop_everyone":
+            mode = "Everyone"
+            line = "AirDrop on for everyone."
+        case "airdrop_on", "airdrop_contacts":
+            mode = "Contacts Only"
+            line = "AirDrop on, contacts only."
+        default:
+            mode = "Off"
+            line = "AirDrop off."
+        }
+        CFPreferencesSetValue(
+            "DiscoverableMode" as CFString,
+            mode as CFString,
+            "com.apple.sharingd" as CFString,
+            kCFPreferencesCurrentUser,
+            kCFPreferencesAnyHost
+        )
+        let ok = CFPreferencesAppSynchronize("com.apple.sharingd" as CFString)
+        // sharingd re-reads its prefs on restart.
+        run(["/usr/bin/killall", "sharingd"])
+        return ok ? line : "Couldn't change AirDrop."
     }
 }

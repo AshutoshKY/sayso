@@ -41,6 +41,7 @@ def decide_payload(
         return {
             "action": "ask",
             "app": None,
+            "system": [],
             "reason": "empty",
             "spoken": "Which app should I open?",
         }
@@ -56,6 +57,7 @@ def decide_payload(
             "action": "ask",
             "app": None,
             "apps": [],
+            "system": [],
             "reason": "backend-unavailable",
             "spoken": "%s is not wired yet. Stay on Laya." % label,
         }
@@ -86,6 +88,7 @@ def decide_payload(
         "apps": decision.apps,
         "pending": decision.pending,
         "url": decision.url,
+        "system": decision.system,
         "reason": decision.reason,
         "spoken": spoken(decision, cat),
         "timing": {"total_ms": total_ms, "laya_ms": timed["laya_ms"]},

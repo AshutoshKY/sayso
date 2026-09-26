@@ -4,6 +4,9 @@ from opener.alias import resolve_alias, spoken_key
 from opener.policy import Decision, decide
 from opener.settings import match_wake, normalize_settings
 from opener.sites import laya_text, parse_open_target
+from opener.system_cmd import from_laya as system_from_laya
+from opener.system_cmd import label as system_label
+from opener.system_cmd import parse as parse_system
 
 
 _STOP = (
@@ -262,6 +265,10 @@ def handle_utterance(
         parts = ["open " + app_id for app_id in named]
     if len(parts) <= 1:
         verb = lifecycle_verb(uttered)
+        if not verb and not target:
+            sys_hit = parse_system(uttered)
+            if sys_hit:
+                return Decision("system", system=[sys_hit], reason="host")
         laya_input = laya_text(uttered, catalog) if target else uttered
         laya = predict_fn(laya_input, catalog)
         app_id, decision = _resolve_app(laya_input, catalog, laya, thresholds)
@@ -273,11 +280,29 @@ def handle_utterance(
             return _lifecycle_decision(verb, [app_id], running)
         if target:
             return _url_decision(target, app_id, decision, catalog)
+        if decision.action in ("ask", "chat"):
+            sys_fb = system_from_laya(laya)
+            if sys_fb:
+                return Decision("system", system=[sys_fb], reason="laya")
         return decision
     verb = lifecycle_verb(uttered) or lifecycle_verb(parts[0])
     opened = []
+    system_actions = []
+    sys_reason = "host"
     last = None
+
+    def collect_system(cmd, reason):
+        if cmd and not any(c.get("verb") == cmd.get("verb") for c in system_actions):
+            system_actions.append(cmd)
+            return reason
+        return None
+
     for part in parts:
+        if not verb:
+            sys_hit = parse_system(part)
+            if sys_hit:
+                collect_system(sys_hit, "host")
+                continue
         laya = predict_fn(part, catalog)
         last = decide(part, alias=None, laya=laya, thresholds=thresholds, catalog=catalog)
         if last.action == "refuse":
@@ -289,6 +314,11 @@ def handle_utterance(
             recovered = exact_installed_id(part, catalog) or resolve_alias(part, catalog)
         if recovered and recovered not in opened:
             opened.append(recovered)
+            continue
+        if not verb and last.action in ("ask", "chat"):
+            sys_fb = system_from_laya(laya)
+            if collect_system(sys_fb, "laya"):
+                sys_reason = "laya"
     if verb:
         if not opened:
             return last or Decision("ask", reason="which-app")
@@ -296,7 +326,9 @@ def handle_utterance(
     if target and opened:
         return _url_decision(target, opened[0], last, catalog)
     if opened:
-        return Decision("open", app=opened[0], apps=opened, reason="laya")
+        return Decision("open", app=opened[0], apps=opened, system=system_actions, reason="laya")
+    if system_actions:
+        return Decision("system", system=system_actions, reason=sys_reason)
     return last or Decision("ask", reason="unspecified")
 
 
@@ -356,7 +388,23 @@ def _site_label(url):
     return label_for(url)
 
 
+def _system_suffix(decision):
+    return " ".join(
+        line for line in (system_label(cmd) for cmd in (decision.system or [])) if line
+    )
+
+
 def spoken(decision, catalog):
+    base = _spoken_base(decision, catalog)
+    suffix = _system_suffix(decision)
+    if suffix and decision.action in ("open", "open_url"):
+        return (base + " " + suffix).strip()
+    return base
+
+
+def _spoken_base(decision, catalog):
+    if decision.action == "system":
+        return _system_suffix(decision)
     if decision.action == "open_url":
         if decision.url == "clipboard":
             if decision.app:

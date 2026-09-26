@@ -3,6 +3,7 @@ import unittest
 from opener.settings import (
     DEFAULT_SETTINGS,
     command_ready,
+    hover_apply,
     listen_hold_named,
     match_wake,
     mic_needed,
@@ -85,8 +86,11 @@ class WakeMatchTests(unittest.TestCase):
         # command is still being spoken.
         self.assertEqual(wake_commit("hey mac", phrases, elapsed=0.05), "hold")
         self.assertEqual(wake_commit("hey mac", phrases, elapsed=0.20), "hold")
+        # "open safari" is still an open list — more names may follow.
+        # Committing here drops "and notes".
+        self.assertEqual(wake_commit("hey mac open safari", phrases, elapsed=0.40), "hold")
         self.assertEqual(
-            wake_commit("hey mac open safari", phrases, elapsed=0.40),
+            wake_commit("hey mac open safari", phrases, elapsed=0.40, final=True),
             ("go", "open safari"),
         )
 
@@ -108,13 +112,74 @@ class WakeMatchTests(unittest.TestCase):
         self.assertEqual(wake_commit("hey mac open", phrases, elapsed=0.40), "hold")
         self.assertEqual(wake_commit("hey mac open the", phrases, elapsed=0.55), "hold")
         self.assertEqual(wake_commit("bhai mac launch", phrases, elapsed=1.20), "hold")
+        self.assertEqual(wake_commit("hey mac open safari", phrases, elapsed=0.40), "hold")
         self.assertEqual(
-            wake_commit("hey mac open safari", phrases, elapsed=0.40),
+            wake_commit("hey mac open safari", phrases, elapsed=0.40, final=True),
             ("go", "open safari"),
         )
+        self.assertEqual(wake_commit("hey mac notes", phrases, elapsed=0.30), "hold")
         self.assertEqual(
-            wake_commit("hey mac notes", phrases, elapsed=0.30),
+            wake_commit("hey mac notes", phrases, elapsed=0.30, final=True),
             ("go", "notes"),
+        )
+
+    def test_wake_plus_multi_app_holds_until_list_closes_or_final(self):
+        phrases = DEFAULT_SETTINGS["wake_phrases"]
+        # Same recognition session: first name must not abort the mic.
+        self.assertEqual(wake_commit("hey mac open notes", phrases, elapsed=0.40), "hold")
+        self.assertEqual(wake_commit("hey mac open notes and", phrases, elapsed=0.55), "hold")
+        self.assertEqual(
+            wake_commit("hey mac open notes and safari", phrases, elapsed=0.70),
+            "hold",
+        )
+        self.assertEqual(
+            wake_commit("hey mac open notes and safari", phrases, elapsed=0.70, final=True),
+            ("go", "open notes and safari"),
+        )
+        # User stopped after one name — the final transcript may go.
+        self.assertEqual(
+            wake_commit("hey mac open notes", phrases, elapsed=1.80, final=True),
+            ("go", "open notes"),
+        )
+
+    def test_wake_plus_system_holds_until_final(self):
+        phrases = DEFAULT_SETTINGS["wake_phrases"]
+        # "increase" / "increase volume" look command-ready but the amount
+        # is still coming. Do not .go on the partial.
+        self.assertEqual(wake_commit("hey mac increase", phrases, elapsed=0.40), "hold")
+        self.assertEqual(wake_commit("hey mac increase volume", phrases, elapsed=0.55), "hold")
+        self.assertEqual(
+            wake_commit("hey mac increase volume by 2", phrases, elapsed=0.80),
+            "hold",
+        )
+        self.assertEqual(
+            wake_commit("hey mac increase volume by 2", phrases, elapsed=0.80, final=True),
+            ("go", "increase volume by 2"),
+        )
+        self.assertEqual(
+            wake_commit("hey mac mute", phrases, elapsed=0.40, final=True),
+            ("go", "mute"),
+        )
+        self.assertEqual(
+            wake_commit("hey mac lock screen", phrases, elapsed=0.50, final=True),
+            ("go", "lock screen"),
+        )
+        self.assertEqual(
+            wake_commit(
+                "hey mac open notes and increase volume by 2",
+                phrases,
+                elapsed=0.90,
+            ),
+            "hold",
+        )
+        self.assertEqual(
+            wake_commit(
+                "hey mac open notes and increase volume by 2",
+                phrases,
+                elapsed=0.90,
+                final=True,
+            ),
+            ("go", "open notes and increase volume by 2"),
         )
 
     def test_command_ready_false_when_list_still_open(self):
@@ -241,6 +306,77 @@ class SettingsNormalizeTests(unittest.TestCase):
         self.assertFalse(mic_needed({"listening_enabled": True, "wake_enabled": False}))
         self.assertTrue(mic_needed({"listening_enabled": True, "wake_enabled": True}))
         self.assertFalse(mic_needed({"listening_enabled": False, "wake_enabled": True}))
+
+
+class HoverArmTests(unittest.TestCase):
+    def test_parked_pointer_does_not_reopen_after_listen(self):
+        # Collapse + island cover fire a fake exit then a fake enter while
+        # the pointer is still in the notch. That pair must not start another
+        # listen. Only a real leave + re-enter may schedule.
+        armed = True
+        armed, schedule = hover_apply("start", armed, cursor_in_hit=True)
+        self.assertFalse(armed)
+        self.assertFalse(schedule)
+
+        armed, schedule = hover_apply("exit", armed, cursor_in_hit=True)
+        self.assertFalse(armed)
+        self.assertFalse(schedule)
+
+        armed, schedule = hover_apply("enter", armed, cursor_in_hit=True)
+        self.assertFalse(armed)
+        self.assertFalse(schedule)
+
+    def test_pointer_on_island_drop_is_still_parked(self):
+        # After collapse the cursor often sits in the drop below the
+        # menu-bar strip. That is still "on the island" — do not re-arm.
+        armed, schedule = hover_apply("collapse", False, cursor_in_hit=True)
+        self.assertFalse(armed)
+        self.assertFalse(schedule)
+        armed, schedule = hover_apply("exit", armed, cursor_in_hit=True)
+        self.assertFalse(armed)
+        armed, schedule = hover_apply("enter", armed, cursor_in_hit=True)
+        self.assertFalse(schedule)
+
+    def test_real_leave_then_rehover_schedules_listen(self):
+        armed = False
+        armed, schedule = hover_apply("exit", armed, cursor_in_hit=False)
+        self.assertTrue(armed)
+        self.assertFalse(schedule)
+
+        armed, schedule = hover_apply("enter", armed, cursor_in_hit=True)
+        self.assertTrue(armed)
+        self.assertTrue(schedule)
+
+    def test_leave_early_cancels_without_disarming_fresh_hover(self):
+        armed, schedule = hover_apply("enter", True, cursor_in_hit=True)
+        self.assertTrue(schedule)
+        armed, schedule = hover_apply("exit", armed, cursor_in_hit=False)
+        self.assertTrue(armed)
+        self.assertFalse(schedule)
+
+    def test_hover_does_not_schedule_while_island_is_up(self):
+        _, schedule = hover_apply("enter", True, cursor_in_hit=True, expanded=True)
+        self.assertFalse(schedule)
+        _, schedule = hover_apply("enter", True, cursor_in_hit=True, busy=True)
+        self.assertFalse(schedule)
+
+    def test_hover_respects_toggles(self):
+        _, schedule = hover_apply(
+            "enter", True, cursor_in_hit=True, listening_enabled=False
+        )
+        self.assertFalse(schedule)
+        _, schedule = hover_apply(
+            "enter", True, cursor_in_hit=True, hover_enabled=False
+        )
+        self.assertFalse(schedule)
+
+    def test_collapse_while_parked_stays_disarmed(self):
+        armed, schedule = hover_apply("collapse", False, cursor_in_hit=True)
+        self.assertFalse(armed)
+        self.assertFalse(schedule)
+        armed, schedule = hover_apply("collapse", False, cursor_in_hit=False)
+        self.assertTrue(armed)
+        self.assertFalse(schedule)
 
 
 if __name__ == "__main__":

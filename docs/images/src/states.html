@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #0a0a0d;
+    --card: #111116;
+    --border: #22222a;
+    --ink: #f5f5f7;
+    --muted: #9a9aa4;
+    --arrow: #4a4a56;
+    --purple: #a85cfa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 940px; height: 720px; }
+  body {
+    background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 10px;
+    padding: 22px 36px;
+  }
+  .card-row {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    padding: 16px 28px;
+    display: flex;
+    align-items: center;
+    gap: 36px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card-row::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 240px;
+    width: 380px; height: 100%;
+    transform: translateX(-50%);
+    background: radial-gradient(ellipse at 50% 0%, rgba(168, 92, 250, 0.10), transparent 75%);
+    pointer-events: none;
+  }
+  .visual-col {
+    width: 440px;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+  }
+  .notch {
+    width: 220px; height: 24px;
+    background: #000;
+    border-radius: 0 0 15px 15px;
+    position: relative;
+    z-index: 2;
+  }
+  .island {
+    margin-top: -3px;
+    position: relative;
+    z-index: 1;
+  }
+  .island img {
+    width: 420px;
+    display: block;
+    filter:
+      drop-shadow(0 16px 36px rgba(0, 0, 0, 0.65))
+      drop-shadow(0 0 60px rgba(168, 92, 250, 0.08));
+  }
+  .idle img {
+    width: 320px;
+    display: block;
+    border-radius: 10px;
+    box-shadow:
+      0 12px 30px rgba(0, 0, 0, 0.55),
+      0 0 40px rgba(168, 92, 250, 0.08);
+  }
+  .text {
+    flex: 1;
+    position: relative;
+    z-index: 1;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--purple);
+    margin-bottom: 4px;
+  }
+  .text .name {
+    font-size: 23px;
+    font-weight: 650;
+    color: var(--ink);
+    letter-spacing: -0.015em;
+  }
+  .text .caption {
+    margin-top: 6px;
+    font-size: 14.5px;
+    line-height: 1.45;
+    color: var(--muted);
+    max-width: 340px;
+  }
+  .down-sep {
+    text-align: center;
+    font-size: 15px;
+    color: var(--arrow);
+    line-height: 1;
+    margin: -1px 0;
+  }
+</style>
+</head>
+<body>
+  <div class="card-row">
+    <div class="visual-col idle">
+      <img src="idle-2x.png" alt="Idle state">
+    </div>
+    <div class="text">
+      <div class="badge">STATE 1</div>
+      <div class="name">Idle</div>
+      <div class="caption">A purple dot waits by the notch. Always listening for &ldquo;Hey Mac&rdquo; &mdash; nothing leaves the Mac.</div>
+    </div>
+  </div>
+
+  <div class="down-sep">&darr;</div>
+
+  <div class="card-row">
+    <div class="visual-col">
+      <div class="notch"></div>
+      <div class="island"><img src="x-listening-xl.png" alt="Listening state"></div>
+    </div>
+    <div class="text">
+      <div class="badge">STATE 2</div>
+      <div class="name">Listening</div>
+      <div class="caption">Live EQ and transcript as you speak. <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace">Esc</span> or Cancel stops it.</div>
+    </div>
+  </div>
+
+  <div class="down-sep">&darr;</div>
+
+  <div class="card-row">
+    <div class="visual-col">
+      <div class="notch"></div>
+      <div class="island"><img src="x-opened-xl.png" alt="Opened state"></div>
+    </div>
+    <div class="text">
+      <div class="badge">STATE 3</div>
+      <div class="name">Opened</div>
+      <div class="caption">Laya picks the installed app, fully on-device. Sayso opens it &mdash; about 1.4&nbsp;s end to end.</div>
+    </div>
+  </div>
+</body>
+</html>

@@ -44,7 +44,7 @@ swiftc -O -parse-as-library \
   -import-objc-header "$root/native/notch/ExceptionCatch.h" \
   -framework AppKit -framework SwiftUI -framework Speech \
   -framework AVFoundation -framework Carbon -framework Foundation \
-  -framework ApplicationServices \
+  -framework ApplicationServices -framework IOKit -framework CoreAudio \
   "$root/native/notch/Engine.swift" \
   "$root/native/notch/Settings.swift" \
   "$root/native/notch/SpeechListen.swift" \

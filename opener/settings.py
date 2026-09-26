@@ -218,7 +218,7 @@ def listen_hold_named(text):
     return True
 
 
-def wake_commit(text, phrases, elapsed, hold=WAKE_BARE_HOLD):
+def wake_commit(text, phrases, elapsed, hold=WAKE_BARE_HOLD, final=False):
     """Decide what a streaming wake transcript should do.
 
     Returns:
@@ -226,11 +226,18 @@ def wake_commit(text, phrases, elapsed, hold=WAKE_BARE_HOLD):
       "hold" — wake heard, but still waiting for a possible command
       ("go", remainder) — combined utterance, run the remainder now
       ("listen", "") — bare wake hung long enough; start a fresh listen
+
+    Partial transcripts must not .go: the first named app or a
+    system-ish phrase is still growing (\"open notes\" -> \"and safari\",
+    \"increase volume\" -> \"by 2\"). Seed only on a closed list
+    (and/then) or the final transcript.
     """
     hit, rest = match_wake(text, phrases)
     if not hit:
         return "ignore"
-    if rest and command_ready(rest):
+    # beginSeeded aborts the mic. A partial first name or a system-ish
+    # fragment ("increase volume") must not commit or later words are lost.
+    if rest and final:
         return ("go", rest)
     if elapsed >= hold and not rest:
         return ("listen", "")
@@ -291,3 +298,37 @@ def mic_needed(raw):
     """Always-on mic is only for the wake-word trigger."""
     cfg = normalize_settings(raw)
     return bool(cfg["listening_enabled"] and cfg["wake_enabled"])
+
+
+def hover_apply(
+    event,
+    armed,
+    cursor_in_hit,
+    expanded=False,
+    busy=False,
+    listening_enabled=True,
+    hover_enabled=True,
+):
+    """Advance hover arming. Returns (armed, should_schedule).
+
+    A parked pointer after a listen must not re-arm. Collapse and the
+    expanded island covering the idle strip fire a fake exit+enter pair
+    while the cursor is still in the hit rect — treat those as no-ops.
+    Only a real leave (cursor outside the hit) re-arms; the next enter
+    then starts the dwell.
+    """
+    if event == "start":
+        return False, False
+    if event in ("exit", "collapse"):
+        return (not bool(cursor_in_hit)), False
+    if event != "enter":
+        return bool(armed), False
+    if not (
+        listening_enabled
+        and hover_enabled
+        and armed
+        and not expanded
+        and not busy
+    ):
+        return bool(armed), False
+    return bool(armed), True

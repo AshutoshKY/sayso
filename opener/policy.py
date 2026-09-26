@@ -9,7 +9,7 @@ DEFAULT_THRESHOLDS = {
 
 
 class Decision:
-    def __init__(self, action, app=None, reason="", apps=None, pending=None, url=None):
+    def __init__(self, action, app=None, reason="", apps=None, pending=None, url=None, system=None):
         self.action = action
         self.app = app
         self.reason = reason
@@ -21,6 +21,7 @@ class Decision:
             self.apps = []
         self.pending = list(pending) if pending else []
         self.url = url
+        self.system = [dict(cmd) for cmd in (system or [])]
 
 
 def _choice(block, key="choice"):

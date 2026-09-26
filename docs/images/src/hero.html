@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --bg: #0a0a0d; --purple: #a85cfa; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 980px; height: 330px; }
+  body {
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .aura {
+    position: absolute;
+    top: -150px; left: 50%;
+    width: 1000px; height: 560px;
+    transform: translateX(-50%);
+    background: radial-gradient(ellipse at 50% 25%, rgba(168, 92, 250, 0.20), transparent 62%);
+    pointer-events: none;
+  }
+  .notch {
+    width: 300px; height: 38px;
+    background: #000;
+    border-radius: 0 0 24px 24px;
+    position: relative;
+    z-index: 2;
+  }
+  .island {
+    margin-top: -6px;
+    position: relative;
+    z-index: 1;
+  }
+  .island img {
+    width: 560px;
+    display: block;
+    filter:
+      drop-shadow(0 34px 80px rgba(0, 0, 0, 0.65))
+      drop-shadow(0 0 110px rgba(168, 92, 250, 0.12));
+  }
+</style>
+</head>
+<body>
+  <div class="aura"></div>
+  <div class="notch"></div>
+  <div class="island"><img src="x-opened-xl.png" alt=""></div>
+</body>
+</html>

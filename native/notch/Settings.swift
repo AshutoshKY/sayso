@@ -141,10 +141,34 @@ enum SettingsLogic {
         return true
     }
 
-    static func wakeCommit(_ text: String, phrases: [String], elapsed: TimeInterval, hold: TimeInterval = wakeBareHold) -> WakeCommit {
+    /// Advance hover arming. Returns (armed, shouldSchedule).
+    /// A parked pointer after a listen must not re-arm. Collapse and the
+    /// expanded island covering the idle strip fire a fake exit+enter
+    /// while the cursor is still in the hit rect — treat those as no-ops.
+    static func hoverApply(
+        event: String,
+        armed: Bool,
+        cursorInHit: Bool,
+        expanded: Bool = false,
+        busy: Bool = false,
+        listeningEnabled: Bool = true,
+        hoverEnabled: Bool = true
+    ) -> (Bool, Bool) {
+        if event == "start" { return (false, false) }
+        if event == "exit" || event == "collapse" {
+            return (!cursorInHit, false)
+        }
+        guard event == "enter" else { return (armed, false) }
+        let schedule = listeningEnabled && hoverEnabled && armed && !expanded && !busy
+        return (armed, schedule)
+    }
+
+    static func wakeCommit(_ text: String, phrases: [String], elapsed: TimeInterval, hold: TimeInterval = wakeBareHold, final: Bool = false) -> WakeCommit {
         let (hit, rest) = matchWake(text, phrases: phrases)
         if !hit { return .ignore }
-        if !rest.isEmpty, commandReady(rest) { return .go(rest) }
+        // beginSeeded aborts the mic. A partial first name or a system-ish
+        // fragment must not commit or later words are lost.
+        if !rest.isEmpty, final { return .go(rest) }
         if elapsed >= hold, rest.isEmpty { return .listen }
         return .hold
     }

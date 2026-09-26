@@ -190,10 +190,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             named: { [weak self] text in
                 guard let self else { return false }
                 let (hit, rest) = SettingsLogic.matchWake(text, phrases: self.prefs.wakePhrases)
-                // Short silence only after a *complete* command. A bare
-                // "hey mac" or "hey mac open" must keep the longer hold so
-                // "browser" is not cut off.
-                return hit && SettingsLogic.commandReady(rest)
+                // Short silence only after a *closed* list that is not
+                // still growing a system command. A first name, mid-list,
+                // or "increase volume" must keep the 1.6s hold.
+                return hit
+                    && SettingsLogic.listenHoldNamed(rest)
+                    && !Engine.looksSystemish(rest)
             }
         )
     }
@@ -203,6 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registerHotKey()
         hoverWork?.cancel()
         hoverWork = nil
+        stopHoverLeaveWatch()
         if !prefs.micNeeded {
             wakeRestart?.cancel()
             wakeRestart = nil
@@ -251,7 +254,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             previewWake(rest)
         }
         let elapsed = wakeFirstHeard.map { Date().timeIntervalSince($0) } ?? 0
-        let commit = SettingsLogic.wakeCommit(text, phrases: prefs.wakePhrases, elapsed: elapsed)
+        let commit = SettingsLogic.wakeCommit(text, phrases: prefs.wakePhrases, elapsed: elapsed, final: final)
         switch commit {
         case .ignore:
             return
@@ -287,7 +290,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         listenStarted = Date()
         state.openedIds = []
         state.resultVerb = "Opened"
-        hoverArmed = false
+        hoverArmed = SettingsLogic.hoverApply(event: "start", armed: hoverArmed, cursorInHit: cursorParkedOnIsland()).0
         state.busy = true
         state.mode = .listening
         state.caption = text
@@ -354,17 +357,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func hoverChanged(_ inside: Bool) {
         hoverWork?.cancel()
         hoverWork = nil
-        if !inside {
-            hoverArmed = true
-            return
-        }
-        guard prefs.listeningEnabled, prefs.hoverEnabled else { return }
-        guard hoverArmed, !state.expanded, !state.busy else { return }
+        let parked = cursorParkedOnIsland()
+        let event = inside ? "enter" : "exit"
+        let (nextArmed, schedule) = SettingsLogic.hoverApply(
+            event: event,
+            armed: hoverArmed,
+            cursorInHit: parked,
+            expanded: state.expanded,
+            busy: state.busy,
+            listeningEnabled: prefs.listeningEnabled,
+            hoverEnabled: prefs.hoverEnabled
+        )
+        hoverArmed = nextArmed
+        if !parked { stopHoverLeaveWatch() }
+        else { startHoverLeaveWatch() }
+        guard schedule else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.hoverWork = nil
-            guard self.prefs.listeningEnabled, self.prefs.hoverEnabled else { return }
-            guard self.hoverArmed, !self.state.expanded, !self.state.busy else { return }
+            let (_, still) = SettingsLogic.hoverApply(
+                event: "enter",
+                armed: self.hoverArmed,
+                cursorInHit: self.cursorParkedOnIsland(),
+                expanded: self.state.expanded,
+                busy: self.state.busy,
+                listeningEnabled: self.prefs.listeningEnabled,
+                hoverEnabled: self.prefs.hoverEnabled
+            )
+            guard still else { return }
             self.startListen()
         }
         hoverWork = work
@@ -378,6 +398,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var speculativeBusy = false
     var listenStarted = Date()
     var hoverWork: DispatchWorkItem?
+    var hoverLeaveWatch: Any?
     var listenGeneration = 0
     var hoverArmed = true
 
@@ -395,7 +416,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         listenStarted = Date()
         state.openedIds = []
         state.resultVerb = "Opened"
-        hoverArmed = false
+        hoverArmed = SettingsLogic.hoverApply(event: "start", armed: hoverArmed, cursorInHit: cursorParkedOnIsland()).0
         state.busy = true
         state.mode = .listening
         state.caption = ""
@@ -425,6 +446,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if Engine.negation.contains(where: { Engine.wordMatch($0, in: uttered) }) { return }
         if Engine.lifecycleVerbs.contains(where: { uttered.lowercased().hasPrefix($0) }) { return }
         if Engine.looksLikeURLOpen(uttered) { return }
+        // System controls (volume, brightness, lock, ...) wait for the final
+        // transcript — never speculative-fire a partial that names one.
+        if Engine.looksSystemish(uttered) { return }
         if !pendingConfirm.isEmpty { return }
         let fresh = Engine.newlyNamedApps(
             uttered,
@@ -552,8 +576,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pendingConfirm = decision.pending.isEmpty ? ids : decision.pending
         case "refuse":
             pendingConfirm = []
+        case "system":
+            pendingConfirm = []
         default:
             break
+        }
+        // System commands execute for real on this Mac; the caption reports
+        // what actually happened (true levels, battery, failures) rather than
+        // the Python-side label line.
+        var line = line
+        if !decision.system.isEmpty {
+            let results = decision.system.map { Engine.runSystem($0) }.filter { !$0.isEmpty }
+            if !results.isEmpty {
+                let sysLine = results.joined(separator: " ")
+                line = (decision.action == "system" || line.isEmpty) ? sysLine : line + " " + sysLine
+            }
         }
         if decision.action == "confirm" || (!decision.pending.isEmpty && ["close", "quit", "kill"].contains(decision.action)) {
             state.caption = line
@@ -565,7 +602,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         guard collapse else {
-            if ["open", "open_url", "close", "quit", "kill"].contains(decision.action) {
+            if ["open", "open_url", "close", "quit", "kill", "system"].contains(decision.action) {
                 state.caption = line
             }
             return
@@ -597,12 +634,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "quit": return "Quit"
         case "kill": return "Force quit"
         case "stop": return "Bye"
+        case "system": return "Done"
         default: return "Opened"
         }
     }
 
     func finishListen(action: String, line: String) {
-        let succeeded = ["open", "close", "quit", "kill", "stop"].contains(action)
+        let succeeded = ["open", "close", "quit", "kill", "stop", "system"].contains(action)
             || !openedThisListen.isEmpty
             || !actedThisListen.isEmpty
         state.busy = false
@@ -645,8 +683,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         idleRect().contains(NSEvent.mouseLocation)
     }
 
+    // After a listen the pointer is often still in the island drop, which
+    // sits below idleRect(). Treat the whole island frame as parked so a
+    // fake tracking-area enter cannot re-arm until a real leave.
+    func cursorParkedOnIsland() -> Bool {
+        let point = NSEvent.mouseLocation
+        return idleRect().contains(point) || islandRect().contains(point)
+    }
+
     func syncHoverArmFromMouse() {
-        hoverArmed = !cursorInIdleHit()
+        hoverArmed = SettingsLogic.hoverApply(
+            event: "collapse",
+            armed: hoverArmed,
+            cursorInHit: cursorParkedOnIsland()
+        ).0
+        if hoverArmed { stopHoverLeaveWatch() }
+        else { startHoverLeaveWatch() }
+    }
+
+    func startHoverLeaveWatch() {
+        guard hoverLeaveWatch == nil else { return }
+        hoverLeaveWatch = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
+            self?.noteMouseMoved()
+            return event
+        }
+        if hoverLeaveWatch == nil {
+            hoverLeaveWatch = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] _ in
+                self?.noteMouseMoved()
+            }
+        }
+    }
+
+    func stopHoverLeaveWatch() {
+        if let hoverLeaveWatch {
+            NSEvent.removeMonitor(hoverLeaveWatch)
+            self.hoverLeaveWatch = nil
+        }
+    }
+
+    func noteMouseMoved() {
+        guard !hoverArmed else {
+            stopHoverLeaveWatch()
+            return
+        }
+        if !cursorParkedOnIsland() {
+            hoverArmed = true
+            stopHoverLeaveWatch()
+        }
     }
 
     struct NotchGeom {

@@ -34,7 +34,7 @@ You  →  notch island  →  POST :8010/decide     (laya-opener, this repo)
 | **~400 ms** | paraphrase decide (daily 15-way set) |
 | **33–53 ms** | app launch (`NSWorkspace`) |
 | **~3 ms** | system-command decide (host parse, no Laya call) |
-| **228** | unit tests |
+| **241** | unit tests |
 | **0** | cloud LLM calls |
 | **macOS 14+** | Apple Silicon |
 | **Python + Swift** | decide API in Docker · island on the host |
@@ -46,9 +46,11 @@ You  →  notch island  →  POST :8010/decide     (laya-opener, this repo)
 | *open anti gravity* | Opens Antigravity |
 | *open her mess* / *open hermits* | Opens Hermes (Apple misheard; we still got it) |
 | *open podcast and notes* | Opens both, as each name lands |
+| *hey mac open notes and safari* | Same — wake word + a list in one breath |
 | *open youtube in brave* | YouTube in Brave — not “some browser” |
 | *open clipboard* | Opens whatever you just copied |
 | *close brave* | Closes the windows; Brave stays running |
+| *close notes* (not running) | “Notes isn't open. Open it?” — *yes* opens it |
 | *quit brave* / *kill brave* | Quits or force-quits |
 | *hello* / unknown name | Opens **nothing** |
 | *goodbye* | Island says goodbye and Sayso quits |
@@ -62,8 +64,11 @@ You  →  notch island  →  POST :8010/decide     (laya-opener, this repo)
 | *open wifi settings* / *open bluetooth settings* | That System Settings pane opens |
 | *turn off airdrop* | AirDrop off (*airdrop everyone* turns it back on) |
 | *open notes and increase volume by 2* | Both — mixed app + system commands compose |
+| *hey mac increase volume by 2* | Wake + system — volume up 20% |
+| *hey mac mute* / *hey mac lock screen* / *hey mac turn on dark mode* | Wake + that system command |
+| *hey mac open notes and increase volume by 2* | Wake + mixed — Notes opens and volume goes up 20% |
 
-Unknown name → nothing. No silent fallthrough to Chrome or Calendar.
+Unknown name → nothing. No silent fallthrough to Chrome or Calendar. System captions report the real outcome — *“Volume 70%”*, *“Battery 100%, plugged in”* — never just your words echoed back.
 
 <p align="center">
   <img src="docs/images/flow.svg" alt="Four-step flow: you speak, island hears, Laya decides, Mac does it" width="900">
@@ -172,6 +177,7 @@ Then:
 
 - Click the purple notch dot, press **⌃⌥Space**, hover the notch (~500 ms), or say **Hey Mac** / **Bhai Mac**.
 - Say *open notes*, *jot something down*, *remind me later*.
+- One breath after the wake works the same as after the hotkey: *hey mac open notes and safari*, *hey mac increase volume by 2*. The mic stays open through the rest of the sentence — it does not cut after the first name or after *increase volume*.
 - Right-click the menu-bar waveform for **Settings** (per-trigger on/off, wake phrases, hover wait, shortcut, listening master, Quit).
 - Say *goodbye* to dismiss.
 
@@ -225,6 +231,8 @@ Live Laya checks (`tests/test_live_laya.py`) skip unless `:8001` is healthy. Wit
 
 - `open anti gravity` → `antigravity`
 - `open podcast and notes` → `apps: [podcasts, notes]`
+- `hey mac open notes and safari` → `apps: [notes, safari]`
+- `hey mac increase volume by 2` → `volume_up 0.2`
 - `open her mess` → `hermes`
 - `open cloud flare` → `cloudflarewarp`
 - `open youtube in brave` → `open_url` + `https://www.youtube.com` + `brave`
@@ -270,7 +278,8 @@ Python and Swift keep alias / speech-form / `preferCatalog` rules in lockstep.
 - Voice-first, **English only**.
 - **Every utterance calls Laya.** Host matching may add extras or recover an exact installed name after Laya asks. It must not skip the call.
 - Missing or unrecognized → open nothing. No Calendar / Chrome / default-browser fallthrough.
-- Several names in one phrase (`and` / `,` / `then`) → act on every hit.
+- Several names in one phrase (`and` / `,` / `then`) → act on every hit. Same after a wake word (*hey mac open notes and safari*).
+- Wake + command stays on one speech session. The first name or a system fragment (*increase volume*) must not cut the mic, or *and safari* / *by 2* never arrive.
 - Close = windows only (one Accessibility grant). Quit / kill = `terminate` / `forceTerminate`. Finder and Sayso are protected.
 - `open <site> in <app>` and `open clipboard` are parsed on the host; Laya still names the app. Unknown site with no app → ask, no default-browser guess.
 - System controls (volume, brightness, appearance, Night Shift, lock, battery, settings panes, AirDrop) are parsed on the host and **skip Laya** when the phrasing fully parses (`open clipboard` precedent). Paraphrases without gate words still go through Laya's `system` head. Execution happens on the Mac in Swift; the caption reports the real result (true level, battery, failure), never a canned line.

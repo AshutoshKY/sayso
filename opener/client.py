@@ -5,6 +5,7 @@ from urllib.error import URLError, HTTPError
 from urllib.request import Request, urlopen
 
 from opener.alias import resolve_alias, spoken_key
+from opener.system_cmd import SYSTEM_CRITERIA, looks_systemish
 
 
 DEFAULT_URL = os.environ.get("LAYA_URL", "http://127.0.0.1:8001/v1/systemone")
@@ -125,7 +126,22 @@ def _looks_like_browser(text):
 
 
 def questions_for(text, catalog):
-    """Installed daily apps, plus extras the utterance actually names."""
+    """Installed daily apps, plus extras the utterance actually names.
+
+    A system-ish utterance also gets the `system` choice head so paraphrases
+    ("make it louder") resolve without a host regex for every phrasing.
+    """
+    questions = _app_questions(text, catalog)
+    if looks_systemish(text):
+        questions["system"] = {
+            "type": "choice",
+            "instructions": "Which Mac system control does the user want, if any? Use unspecified for pure app requests or chat.",
+            "criteria": dict(SYSTEM_CRITERIA),
+        }
+    return questions
+
+
+def _app_questions(text, catalog):
     catalog = catalog or {}
     if _looks_like_browser(text):
         criteria = {}
@@ -203,7 +219,7 @@ def _named_criteria(named, catalog):
 def parse_answers(payload):
     answers = (payload or {}).get("answers") or {}
     out = {}
-    for key in ("intent", "app"):
+    for key in ("intent", "app", "system"):
         block = answers.get(key) or {}
         out[key] = {
             "choice": block.get("choice"),
@@ -234,5 +250,6 @@ def predict(text, catalog, url=None, opener=None, timeout=30, model="english"):
         return {
             "intent": {"choice": None, "answer_confidence": 0.0, "probabilities": {}},
             "app": {"choice": None, "answer_confidence": 0.0, "probabilities": {}},
+            "system": {"choice": None, "answer_confidence": 0.0, "probabilities": {}},
         }
     return parse_answers(payload)

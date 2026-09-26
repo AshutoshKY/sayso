@@ -120,6 +120,16 @@ class LiveLayaTests(unittest.TestCase):
         self.assertEqual(d.action, "open")
         self.assertEqual(d.apps, ["notes", "safari"])
 
+    def test_hey_mac_open_notes_and_safari(self):
+        d = self._handle("hey mac open notes and safari")
+        self.assertEqual(d.action, "open")
+        self.assertEqual(d.apps, ["notes", "safari"])
+
+    def test_hey_mac_increase_volume_by_2(self):
+        d = self._handle("hey mac increase volume by 2")
+        self.assertEqual(d.action, "system")
+        self.assertEqual(d.system, [{"verb": "volume_up", "value": 0.2}])
+
     def test_open_podcast_and_notes(self):
         if "podcasts" not in self.catalog:
             self.skipTest("Podcasts not installed")

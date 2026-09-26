@@ -588,6 +588,20 @@ class WakeStripTests(unittest.TestCase):
         )
         self.assertEqual(called, ["hey mac open notes"])
 
+    def test_hey_mac_open_notes_and_safari_opens_both(self):
+        called = []
+
+        def predict(text, catalog):
+            called.append(text)
+            if "safari" in text:
+                return _laya("safari")
+            return _laya("notes")
+
+        d = handle_utterance("hey mac open notes and safari", CATALOG, {}, predict)
+        self.assertEqual(d.action, "open")
+        self.assertEqual(d.apps, ["notes", "safari"])
+        self.assertEqual(called, ["open notes", "open safari"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -193,7 +193,7 @@ Apple Speech is the only recognizer. There is no custom language model and no on
 
 ### How a listen starts
 
-Four triggers, one island. The wake listener stays on the same Apple Speech session through the command. A bare `hey mac` partial is **not** a commit — Apple almost always emits that first, then `hey mac open`, then `hey mac open safari`. Committing on the prefix or on the verb alone used to fire `/decide` with no app and drop the rest. Hold ~450 ms for a bare wake; keep holding while the remainder is only a verb (`open` / `open the`). Seed only when the remainder is a real command. If the hang expires with nothing after the wake, start a normal listen.
+Four triggers, one island. The wake listener stays on the same Apple Speech session through the command. A bare `hey mac` partial is **not** a commit — Apple almost always emits that first, then `hey mac open`, then `hey mac open safari`. Committing on the prefix or on the verb alone used to fire `/decide` with no app and drop the rest. Hold ~450 ms for a bare wake; keep holding while the remainder is only a verb (`open` / `open the`). **Never seed on a streaming partial** — `beginSeeded` aborts the wake mic, so `hey mac open notes` committing mid-utterance drops `and safari`, and `hey mac increase volume` drops `by 2`. `wakeCommit(..., final:)` seeds only on the final transcript. The wake listener's short silence is only for a closed non-system list; first name / mid-list / system-ish keep the ~1.6 s hold. If the hang expires with nothing after the wake, start a normal listen.
 
 | Trigger | Delay |
 |---|---|
@@ -297,16 +297,34 @@ server.decide_payload
   → loop.handle_utterance
        pending yes/no? → open or refuse (no Laya)
        stop phrase? → Decision(stop)
+       system_cmd.parse fully parses? → Decision(system) (no Laya)
        split on and / , / then
        for each part:
-         client.predict → Laya
+         system_cmd.parse first; else client.predict → Laya
          policy.decide
          if not open/refuse: recover exact_installed_id or resolve_alias
        close/quit/kill verb? → close windows / quit / kill if running, else confirm
-  → { action, app, apps, pending, reason, spoken, timing }
+  → { action, app, apps, pending, system, reason, spoken, timing }
 ```
 
-Empty text does not call Laya. Everything else does.
+Empty text does not call Laya. Fully-parsed system commands (volume, brightness,
+appearance, Night Shift, lock, battery, Wi-Fi/Bluetooth panes, AirDrop) do not call
+Laya either — the host parser produces `{verb, value}` directly. System-ish
+paraphrases the host parser misses still reach Laya through a `system` question
+head (gated by `looks_systemish`); `system_cmd.from_laya` converts the answer back
+with default amounts. The island executes each command in Swift and the caption
+reports the real outcome.
+
+macOS 26 notes for the Swift executors (verified by disassembly + live runs):
+`DisplayServicesGetBrightness` is now `(display, float*) -> int` (0 = ok, 1000 =
+fail) — the old float-return signature crashes with SIGBUS/SIGSEGV.
+`SACLockScreenImmediate` and the `CGSession` menu extra are gone; lock is a
+synthetic ⌃⌘Q posted at the HID tap (the app is already Accessibility-trusted).
+Volume uses CoreAudio on the default output device (works where
+`osascript get volume settings` fails, e.g. HDMI/DisplayPort). Dark/light is a
+System Events AppleScript (one-time Automation consent). ASR writes small numbers
+as words — including homophones ("increase volume by two" arrives as "by to");
+`system_cmd` maps those only after `by`, so "too bright" stays an intensifier.
 
 ### Choice-set construction (`questions_for`)
 
