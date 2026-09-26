@@ -10,7 +10,7 @@ Write-up of the 2026-09-26 investigation. Operational rules for the next change 
 mic → Apple Speech (notch app)
     → POST 127.0.0.1:8010/decide   (laya-opener container)
         → POST :8001/v1/systemone  (laya-upstream, CPU)
-    → NSWorkspace / open -a <catalog app>
+    → NSWorkspace / open -a <catalog app> / native system controls
 ```
 
 Every utterance still calls Laya. The host never skips the model. Missing or unrecognized still opens nothing.
@@ -37,11 +37,11 @@ No guess from memory. Each stage was measured on the live stack (Apple M4, 10 co
 curl -sS -m 3 http://127.0.0.1:8010/health
 # {"status": "ok", "laya": true}
 
-pgrep -lf LayaOpener
+pgrep -lf Sayso
 docker ps --filter name=laya
 ```
 
-Both containers were up. The notch app was running from `~/Applications/LayaOpener.app`.
+Both containers were up. The notch app was running from `~/Applications/Sayso.app`.
 
 ### 2. Time `/decide` with the same fat catalog the app sends
 
@@ -173,7 +173,7 @@ open anti gravity app fat      p50=286  -> open antigravity
 jot something down fat         p50=440  -> open notes
 ```
 
-107 unit tests + live Laya suite green.
+241 unit tests + live Laya suite green.
 
 ## How it works now vs before
 

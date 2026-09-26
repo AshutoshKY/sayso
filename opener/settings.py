@@ -303,7 +303,6 @@ def mic_needed(raw):
 def hover_apply(
     event,
     armed,
-    cursor_in_hit,
     expanded=False,
     busy=False,
     listening_enabled=True,
@@ -311,16 +310,16 @@ def hover_apply(
 ):
     """Advance hover arming. Returns (armed, should_schedule).
 
-    A parked pointer after a listen must not re-arm. Collapse and the
-    expanded island covering the idle strip fire a fake exit+enter pair
-    while the cursor is still in the hit rect — treat those as no-ops.
-    Only a real leave (cursor outside the hit) re-arms; the next enter
-    then starts the dwell.
+    A listen consumes the current hover. Collapse and island-cover
+    tracking events (fake exit/enter) must stay disarmed. Re-arm only
+    on a later genuine mouse-exit after the island has collapsed.
     """
-    if event == "start":
+    if event in ("start", "collapse"):
         return False, False
-    if event in ("exit", "collapse"):
-        return (not bool(cursor_in_hit)), False
+    if event == "exit":
+        if expanded or busy:
+            return False, False
+        return True, False
     if event != "enter":
         return bool(armed), False
     if not (

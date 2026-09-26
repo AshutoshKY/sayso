@@ -33,7 +33,7 @@ No guess from memory. The live stack and the source were split first.
 curl -sS -m 3 http://127.0.0.1:8010/health
 # {"status": "ok", "laya": true}
 
-pgrep -lf LayaOpener
+pgrep -lf Sayso
 ls /Applications | rg -i 'warp|cloud|hermes'
 ```
 
@@ -112,7 +112,7 @@ Python first (TDD + Docker), then Swift (rebuild the `.app`). Laya is still alwa
 - `contextualStrings` = ranked catalog phrases, cap 100
 - Collect best + all transcriptions + each segment’s `alternativeSubstrings`
 - `preferCatalog`: lock Apple’s *first named app*, prefer that app’s official spelling. Do not swap in a later hypothesis that names a different app (`notes` must not steal `hermits`)
-- Hold ~0.75s until the partial names an installed app; still ~0.45s once it does
+- Hold ~1.6s until the partial names an installed app or closed list; ~0.45s once a closed list lands
 
 `Engine.swift` / `NotchApp.swift`
 
@@ -141,7 +141,7 @@ Python first (TDD + Docker), then Swift (rebuild the `.app`). Laya is still alwa
 | Apple hint | `.dictation` | `.search` |
 | Vocabulary bias | none | ≤100 ranked phrases, unusual brands first |
 | Hypothesis used | first string only | alternatives scored; first named app wins |
-| End listen | 0.45s after any unchanged text | 0.45s if named; ~0.75s if not |
+| End listen | 0.45s after any unchanged text | 0.45s if closed list; ~1.6s if open/unnamed |
 | Hermes spoken forms | `hermes` only (and a risky short singular) | `hermes`, `her mes`, `her mess`, `hermits`, `hurmez` |
 | Cloudflare spoken forms | display name / compact id | `cloudflare`, `cloud flare`, `cloud flare warp`, `warp` as that app’s tail |
 | After Laya says unspecified | exact compact id only | alias hit recovers the catalog app |
@@ -160,7 +160,7 @@ open anti gravity     → antigravity
 open podcast and notes → [podcasts, notes]
 ```
 
-123 unit + live tests green. Opener rebuilt and running; `LayaOpener.app` rebuilt and relaunched so the new recognizer is actually loaded (`ditto` overwrites the bundle but does not replace a live process).
+241 unit + live tests green. Opener rebuilt and running; `Sayso.app` rebuilt and relaunched so the new recognizer is actually loaded (`ditto` overwrites the bundle but does not replace a live process).
 
 ## What this does not do
 

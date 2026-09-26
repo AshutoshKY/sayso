@@ -28,11 +28,14 @@ with open("catalog.json", "w") as f:
     f.write("\n")
 PY
 
-app="$root/dist/LayaOpener.app"
+app="$root/dist/Sayso.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$root/native/notch/Info.plist" "$app/Contents/Info.plist"
 cp "$root/catalog.json" "$app/Contents/Resources/catalog.json"
+if [[ -f "$root/native/notch/AppIcon.icns" ]]; then
+  cp "$root/native/notch/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
+fi
 
 sdk="$(xcrun --show-sdk-path)"
 objc="$root/dist/ExceptionCatch.o"
@@ -50,7 +53,7 @@ swiftc -O -parse-as-library \
   "$root/native/notch/SpeechListen.swift" \
   "$root/native/notch/NotchApp.swift" \
   "$objc" \
-  -o "$app/Contents/MacOS/LayaOpener"
+  -o "$app/Contents/MacOS/Sayso"
 
 # Stable identity so TCC (mic/speech) survives rebuilds and restarts.
 identity="-"
@@ -71,9 +74,10 @@ fi
 "${sign[@]}" "$app"
 
 # Same path every time so macOS can keep mic/speech grants.
-stable="$HOME/Applications/LayaOpener.app"
+# Bundle ID + codesign identity stay com.laya.opener / "Laya Opener".
+stable="$HOME/Applications/Sayso.app"
 mkdir -p "$HOME/Applications"
-rm -rf "$stable"
+rm -rf "$HOME/Applications/LayaOpener.app" "$stable"
 ditto "$app" "$stable"
 "${sign[@]}" "$stable"
 echo "built $app"

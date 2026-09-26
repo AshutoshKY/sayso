@@ -89,7 +89,7 @@ enum Engine {
     static let lifecycleVerbs = [
         "force quit", "close", "quit", "kill",
     ]
-    static let protectedApps: Set<String> = ["finder", "layaopener"]
+    static let protectedApps: Set<String> = ["finder", "layaopener", "sayso"]
     static let siteWords: [String] = [
         "youtube", "you tube", "youtu.be", "github", "gmail", "chatgpt",
         "clipboard", "reddit", "twitter", "google.com", "youtube.com", "github.com",

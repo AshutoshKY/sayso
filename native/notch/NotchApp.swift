@@ -59,8 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             catalog: catalog,
             onTap: { [weak self] in self?.dotTapped() },
             onListen: { },
-            onQuit: { NSApp.terminate(nil) },
-            onHover: { [weak self] inside in self?.hoverChanged(inside) }
+            onQuit: { NSApp.terminate(nil) }
         )
         let host = HoverHostView(rootView: root)
         host.onHover = { [weak self] inside in self?.hoverChanged(inside) }
@@ -205,7 +204,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registerHotKey()
         hoverWork?.cancel()
         hoverWork = nil
-        stopHoverLeaveWatch()
         if !prefs.micNeeded {
             wakeRestart?.cancel()
             wakeRestart = nil
@@ -290,7 +288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         listenStarted = Date()
         state.openedIds = []
         state.resultVerb = "Opened"
-        hoverArmed = SettingsLogic.hoverApply(event: "start", armed: hoverArmed, cursorInHit: cursorParkedOnIsland()).0
+        hoverArmed = SettingsLogic.hoverApply(event: "start", armed: hoverArmed).0
         state.busy = true
         state.mode = .listening
         state.caption = text
@@ -357,20 +355,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func hoverChanged(_ inside: Bool) {
         hoverWork?.cancel()
         hoverWork = nil
-        let parked = cursorParkedOnIsland()
+        // Collapse and the expanded island covering the idle strip both
+        // fire a fake exit. Ignore it — only a later real leave re-arms.
+        if !inside, state.expanded || state.busy { return }
         let event = inside ? "enter" : "exit"
         let (nextArmed, schedule) = SettingsLogic.hoverApply(
             event: event,
             armed: hoverArmed,
-            cursorInHit: parked,
             expanded: state.expanded,
             busy: state.busy,
             listeningEnabled: prefs.listeningEnabled,
             hoverEnabled: prefs.hoverEnabled
         )
         hoverArmed = nextArmed
-        if !parked { stopHoverLeaveWatch() }
-        else { startHoverLeaveWatch() }
         guard schedule else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
@@ -378,7 +375,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let (_, still) = SettingsLogic.hoverApply(
                 event: "enter",
                 armed: self.hoverArmed,
-                cursorInHit: self.cursorParkedOnIsland(),
                 expanded: self.state.expanded,
                 busy: self.state.busy,
                 listeningEnabled: self.prefs.listeningEnabled,
@@ -398,7 +394,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var speculativeBusy = false
     var listenStarted = Date()
     var hoverWork: DispatchWorkItem?
-    var hoverLeaveWatch: Any?
     var listenGeneration = 0
     var hoverArmed = true
 
@@ -416,7 +411,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         listenStarted = Date()
         state.openedIds = []
         state.resultVerb = "Opened"
-        hoverArmed = SettingsLogic.hoverApply(event: "start", armed: hoverArmed, cursorInHit: cursorParkedOnIsland()).0
+        hoverArmed = SettingsLogic.hoverApply(event: "start", armed: hoverArmed).0
         state.busy = true
         state.mode = .listening
         state.caption = ""
@@ -679,57 +674,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func cursorInIdleHit() -> Bool {
-        idleRect().contains(NSEvent.mouseLocation)
-    }
-
-    // After a listen the pointer is often still in the island drop, which
-    // sits below idleRect(). Treat the whole island frame as parked so a
-    // fake tracking-area enter cannot re-arm until a real leave.
-    func cursorParkedOnIsland() -> Bool {
-        let point = NSEvent.mouseLocation
-        return idleRect().contains(point) || islandRect().contains(point)
-    }
-
     func syncHoverArmFromMouse() {
-        hoverArmed = SettingsLogic.hoverApply(
-            event: "collapse",
-            armed: hoverArmed,
-            cursorInHit: cursorParkedOnIsland()
-        ).0
-        if hoverArmed { stopHoverLeaveWatch() }
-        else { startHoverLeaveWatch() }
-    }
-
-    func startHoverLeaveWatch() {
-        guard hoverLeaveWatch == nil else { return }
-        hoverLeaveWatch = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
-            self?.noteMouseMoved()
-            return event
-        }
-        if hoverLeaveWatch == nil {
-            hoverLeaveWatch = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] _ in
-                self?.noteMouseMoved()
-            }
-        }
-    }
-
-    func stopHoverLeaveWatch() {
-        if let hoverLeaveWatch {
-            NSEvent.removeMonitor(hoverLeaveWatch)
-            self.hoverLeaveWatch = nil
-        }
-    }
-
-    func noteMouseMoved() {
-        guard !hoverArmed else {
-            stopHoverLeaveWatch()
-            return
-        }
-        if !cursorParkedOnIsland() {
-            hoverArmed = true
-            stopHoverLeaveWatch()
-        }
+        hoverArmed = SettingsLogic.hoverApply(event: "collapse", armed: hoverArmed).0
     }
 
     struct NotchGeom {
@@ -818,7 +764,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = item.button {
             button.image = NSImage(
                 systemSymbolName: "waveform",
-                accessibilityDescription: "Laya Opener"
+                accessibilityDescription: "Sayso"
             )
             button.action = #selector(statusClicked)
             button.target = self
@@ -875,7 +821,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let root = SettingsRoot(prefs: prefs, onQuit: { [weak self] in self?.quit() })
         let host = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: host)
-        window.title = "Laya Opener"
+        window.title = "Sayso"
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.setContentSize(NSSize(width: 440, height: 680))
         window.center()
@@ -1020,7 +966,6 @@ struct IslandView: View {
     var onTap: () -> Void
     var onListen: () -> Void
     var onQuit: () -> Void
-    var onHover: (Bool) -> Void
 
     var body: some View {
         GeometryReader { geo in
@@ -1032,7 +977,6 @@ struct IslandView: View {
                 .padding(.leading, 4)
                 .contentShape(Rectangle())
                 .onTapGesture { onTap() }
-                .onHover { onHover($0) }
         }
     }
 }

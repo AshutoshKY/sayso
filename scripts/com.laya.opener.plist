@@ -6,7 +6,7 @@
   <string>com.laya.opener</string>
   <key>ProgramArguments</key>
   <array>
-    <string>__HOME__/Applications/LayaOpener.app/Contents/MacOS/LayaOpener</string>
+    <string>__HOME__/Applications/Sayso.app/Contents/MacOS/Sayso</string>
   </array>
   <key>RunAtLoad</key>
   <true/>

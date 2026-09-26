@@ -310,72 +310,58 @@ class SettingsNormalizeTests(unittest.TestCase):
 
 class HoverArmTests(unittest.TestCase):
     def test_parked_pointer_does_not_reopen_after_listen(self):
-        # Collapse + island cover fire a fake exit then a fake enter while
-        # the pointer is still in the notch. That pair must not start another
-        # listen. Only a real leave + re-enter may schedule.
+        # After a listen the current hover is consumed. Collapse / island
+        # cover can fire any mix of fake exit/enter, even with a wrong
+        # hit-test. None of that may schedule another listen. Only a
+        # later enter after a real leave may.
         armed = True
-        armed, schedule = hover_apply("start", armed, cursor_in_hit=True)
+        armed, schedule = hover_apply("start", armed)
         self.assertFalse(armed)
         self.assertFalse(schedule)
 
-        armed, schedule = hover_apply("exit", armed, cursor_in_hit=True)
+        for event in ("collapse", "enter", "enter", "collapse", "enter"):
+            armed, schedule = hover_apply(event, armed)
+            self.assertFalse(armed, event)
+            self.assertFalse(schedule, event)
+        # Fake exit while the island is still up must not re-arm.
+        armed, schedule = hover_apply("exit", armed, expanded=True)
         self.assertFalse(armed)
         self.assertFalse(schedule)
-
-        armed, schedule = hover_apply("enter", armed, cursor_in_hit=True)
-        self.assertFalse(armed)
-        self.assertFalse(schedule)
-
-    def test_pointer_on_island_drop_is_still_parked(self):
-        # After collapse the cursor often sits in the drop below the
-        # menu-bar strip. That is still "on the island" — do not re-arm.
-        armed, schedule = hover_apply("collapse", False, cursor_in_hit=True)
-        self.assertFalse(armed)
-        self.assertFalse(schedule)
-        armed, schedule = hover_apply("exit", armed, cursor_in_hit=True)
-        self.assertFalse(armed)
-        armed, schedule = hover_apply("enter", armed, cursor_in_hit=True)
+        armed, schedule = hover_apply("enter", armed)
         self.assertFalse(schedule)
 
     def test_real_leave_then_rehover_schedules_listen(self):
         armed = False
-        armed, schedule = hover_apply("exit", armed, cursor_in_hit=False)
+        armed, schedule = hover_apply("exit", armed)
         self.assertTrue(armed)
         self.assertFalse(schedule)
 
-        armed, schedule = hover_apply("enter", armed, cursor_in_hit=True)
+        armed, schedule = hover_apply("enter", armed)
         self.assertTrue(armed)
         self.assertTrue(schedule)
 
     def test_leave_early_cancels_without_disarming_fresh_hover(self):
-        armed, schedule = hover_apply("enter", True, cursor_in_hit=True)
+        armed, schedule = hover_apply("enter", True)
         self.assertTrue(schedule)
-        armed, schedule = hover_apply("exit", armed, cursor_in_hit=False)
+        armed, schedule = hover_apply("exit", armed)
         self.assertTrue(armed)
         self.assertFalse(schedule)
 
     def test_hover_does_not_schedule_while_island_is_up(self):
-        _, schedule = hover_apply("enter", True, cursor_in_hit=True, expanded=True)
+        _, schedule = hover_apply("enter", True, expanded=True)
         self.assertFalse(schedule)
-        _, schedule = hover_apply("enter", True, cursor_in_hit=True, busy=True)
+        _, schedule = hover_apply("enter", True, busy=True)
         self.assertFalse(schedule)
 
     def test_hover_respects_toggles(self):
-        _, schedule = hover_apply(
-            "enter", True, cursor_in_hit=True, listening_enabled=False
-        )
+        _, schedule = hover_apply("enter", True, listening_enabled=False)
         self.assertFalse(schedule)
-        _, schedule = hover_apply(
-            "enter", True, cursor_in_hit=True, hover_enabled=False
-        )
+        _, schedule = hover_apply("enter", True, hover_enabled=False)
         self.assertFalse(schedule)
 
-    def test_collapse_while_parked_stays_disarmed(self):
-        armed, schedule = hover_apply("collapse", False, cursor_in_hit=True)
+    def test_collapse_does_not_rearm(self):
+        armed, schedule = hover_apply("collapse", False)
         self.assertFalse(armed)
-        self.assertFalse(schedule)
-        armed, schedule = hover_apply("collapse", False, cursor_in_hit=False)
-        self.assertTrue(armed)
         self.assertFalse(schedule)
 
 

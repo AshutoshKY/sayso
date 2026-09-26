@@ -456,6 +456,20 @@ class HandleUtteranceTests(unittest.TestCase):
         self.assertIsNone(d.app)
         self.assertEqual(d.reason, "protected")
 
+    def test_close_does_not_target_sayso(self):
+        catalog = dict(CATALOG)
+        catalog["sayso"] = {"say": "Sayso", "aliases": ["sayso", "say so"]}
+
+        def predict(text, catalog):
+            return _laya("sayso")
+
+        d = handle_utterance(
+            "quit sayso", catalog, {}, predict, running={"sayso"}
+        )
+        self.assertEqual(d.action, "ask")
+        self.assertIsNone(d.app)
+        self.assertEqual(d.reason, "protected")
+
 
 class SpokenTests(unittest.TestCase):
     def test_open_uses_spoken_name(self):

@@ -4,10 +4,10 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 src="$root/scripts/com.laya.opener.plist"
 dst="$HOME/Library/LaunchAgents/com.laya.opener.plist"
-bin="$HOME/Applications/LayaOpener.app/Contents/MacOS/LayaOpener"
+bin="$HOME/Applications/Sayso.app/Contents/MacOS/Sayso"
 
 if [[ ! -x "$bin" ]]; then
-  echo "LayaOpener is not installed at $HOME/Applications/LayaOpener.app"
+  echo "Sayso is not installed at $HOME/Applications/Sayso.app"
   echo "Run ./scripts/build_app.sh first."
   exit 2
 fi

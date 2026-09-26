@@ -142,21 +142,21 @@ enum SettingsLogic {
     }
 
     /// Advance hover arming. Returns (armed, shouldSchedule).
-    /// A parked pointer after a listen must not re-arm. Collapse and the
-    /// expanded island covering the idle strip fire a fake exit+enter
-    /// while the cursor is still in the hit rect — treat those as no-ops.
+    /// A listen consumes the current hover. Collapse and island-cover
+    /// tracking events (fake exit/enter) must stay disarmed. Re-arm
+    /// only on a later genuine mouse-exit after the island has collapsed.
     static func hoverApply(
         event: String,
         armed: Bool,
-        cursorInHit: Bool,
         expanded: Bool = false,
         busy: Bool = false,
         listeningEnabled: Bool = true,
         hoverEnabled: Bool = true
     ) -> (Bool, Bool) {
-        if event == "start" { return (false, false) }
-        if event == "exit" || event == "collapse" {
-            return (!cursorInHit, false)
+        if event == "start" || event == "collapse" { return (false, false) }
+        if event == "exit" {
+            if expanded || busy { return (false, false) }
+            return (true, false)
         }
         guard event == "enter" else { return (armed, false) }
         let schedule = listeningEnabled && hoverEnabled && armed && !expanded && !busy
@@ -425,7 +425,7 @@ struct SettingsRoot: View {
                 }
             }
             Section {
-                Button("Quit Laya Opener", role: .destructive, action: onQuit)
+                Button("Quit Sayso", role: .destructive, action: onQuit)
             }
         }
         .formStyle(.grouped)

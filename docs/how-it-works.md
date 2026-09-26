@@ -7,11 +7,16 @@ This product exists to **test Laya**, not to bypass it. Every utterance is a Lay
 ```
 mic  →  notch  →  POST :8010/decide   (laya-opener container)
                          │
+               ┌─────────┴─────────┐
+               ▼                   ▼
+      [host system parse]     POST :8001/v1/systemone (laya-upstream container)
+      (~3 ms, skips Laya)          │
+               │                   ▼
+               │              app prediction / system paraphrase
+               └─────────┬─────────┘
                          ▼
-              POST :8001/v1/systemone (laya-upstream container)
-                         │
-                         ▼
-                    open / close windows / quit / force quit
+             open / close windows / quit / force quit /
+             volume / brightness / dark mode / lock / battery / panes / airdrop
 ```
 
 Architecture and request-flow diagrams are in this file and the [README](../README.md). Latency investigation notes: [`voice-to-open-latency.md`](voice-to-open-latency.md). Speech investigation notes: [`speech-recognition.md`](speech-recognition.md).
@@ -20,7 +25,7 @@ Architecture and request-flow diagrams are in this file and the [README](../READ
 
 ## 1. What it does
 
-You click the purple notch dot, hover the notch (default 500 ms, configurable), press the shortcut (default **⌃⌥Space**), click the menu-bar waveform, or say **Hey Mac** / **Bhai Mac**. The black hardware island drops. You speak English. Laya picks an installed Mac app. That app opens, closes, quits, or force-quits.
+You click the purple notch dot, hover the notch (default 500 ms, configurable), press the shortcut (default **⌃⌥Space**), click the menu-bar waveform, or say **Hey Mac** / **Bhai Mac**. The black hardware island drops. You speak English. Laya picks an installed Mac app, or the host parses system commands. That app opens, closes, quits, or the Mac executes system controls.
 
 | You say | What happens |
 |---|---|
@@ -38,15 +43,28 @@ You click the purple notch dot, hover the notch (default 500 ms, configurable), 
 | *close brave* when Brave is not open | Island: “Brave isn't open. Open it?” Yes opens; no refuses |
 | *hello* / weather / unknown name | Opens **nothing** |
 | *goodbye* | Island says Goodbye and the app quits |
+| *increase volume by 2* | Volume up 20% (steps are 10%; *by 2 percent* = 2%) |
+| *volume up* / *mute* / *set volume to 50* | CoreAudio hardware volume on default output device |
+| *make the screen brighter* / *dim the screen* | DisplayServices brightness ∓10% |
+| *turn on dark mode* / *light mode* | System appearance toggle via AppleScript |
+| *night mode on* | Night Shift on |
+| *lock screen* | Locks the Mac (synthetic ⌃⌘Q) |
+| *battery percentage* | Real battery level & charging state via IOKit |
+| *open wifi settings* / *open bluetooth settings* | That System Settings pane opens |
+| *turn off airdrop* | AirDrop off (*airdrop everyone* turns it back on) |
+| *open notes and increase volume by 2* | Mixed app + system commands compose |
+| *hey mac open notes and safari* | Wake + multi-app list held in one breath |
+| *hey mac increase volume by 2* | Wake + system control in one breath |
 
 Rules that do not bend:
 
 - Voice-first, **English only** (`en-US` recognizer).
 - **Every utterance calls Laya.** Host matching may add extras to the prompt or recover an exact installed name after Laya asks. It must not skip the call.
+- Fully-parsed system commands (volume, brightness, appearance, lock, battery, panes, AirDrop) are host-parsed and skip Laya (`open clipboard` precedent) in ~3 ms. Paraphrases without gate words still query Laya's `system` head.
 - Missing or unrecognized → open nothing. No Calendar / Chrome / default-browser fallthrough for unknown speech.
 - Several names in one utterance (`and` / `,` / `then`) → Laya each part, act on every hit.
 - Open / close / quit Laya's highest-scoring **catalog** app. `unspecified` never wins.
-- Close = windows only (Accessibility, one grant). Quit / kill / force quit = terminate. Finder and Laya Opener are protected.
+- Close = windows only (Accessibility, one grant). Quit / kill / force quit = terminate. Finder and Sayso are protected.
 - `open youtube in brave` / `open github.com in safari` / `open clipboard` → host parses the site, Laya names the app, Mac opens the URL in that app. No default-browser guess when the app is unnamed.
 - First launch: grant **Microphone** and **Speech Recognition**. First close: grant **Accessibility** once.
 
@@ -63,14 +81,14 @@ flowchart LR
   subgraph macHost["Mac host"]
     User["You"]
     Mic["Mic"]
-    Notch["LayaOpener.app<br/>accessory + notch UI"]
+    Notch["Sayso.app<br/>accessory + notch UI"]
     Speech["Apple Speech<br/>SFSpeechRecognizer"]
     Scan["Catalog scan<br/>/Applications + daily set"]
-    Launch["NSWorkspace open / terminate + AppleScript close"]
+    Launch["Executors<br/>NSWorkspace · AX · CoreAudio<br/>DisplayServices · HID · AppleScript"]
   end
 
   subgraph docker["Docker Desktop"]
-    Opener["laya-opener :8010<br/>Python decide API"]
+    Opener["laya-opener :8010<br/>Python decide API<br/>host system parser + policy"]
     Laya["laya-upstream :8001<br/>Laya english, CPU"]
   end
 
@@ -80,16 +98,16 @@ flowchart LR
   Speech -->|partial + final transcript| Notch
   Scan --> Notch
   Notch -->|POST /decide + catalog + running + pending| Opener
-  Opener -->|POST /v1/systemone| Laya
-  Laya -->|choice + probabilities| Opener
-  Opener -->|action + apps + timing| Notch
+  Opener -.->|app prediction or paraphrase| Laya
+  Laya -.->|choice + probabilities| Opener
+  Opener -->|action + apps + system + timing| Notch
   Notch --> Launch
 ```
 
 | Process | Where | Port | Job |
 |---|---|---|---|
-| `LayaOpener.app` | `~/Applications/LayaOpener.app` | — | Notch UI, mic, Apple Speech, catalog scan, open / close / quit |
-| `laya-opener` | Docker, this repo | `127.0.0.1:8010` | Decide API. Builds the Laya prompt. Policy + alias recovery. |
+| `Sayso.app` | `~/Applications/Sayso.app` | — | Notch UI, mic, Apple Speech, catalog scan, open / close / quit, native system controls |
+| `laya-opener` | Docker, this repo | `127.0.0.1:8010` | Decide API. System command parsing (~3 ms), Laya prompt builder, policy, alias recovery |
 | `laya-upstream` | Docker, `laya-upstream:latest` | `127.0.0.1:8001` | Laya System-1 English checkpoint on CPU |
 
 The opener container reaches Laya at `http://host.docker.internal:8001/v1/systemone`. The Mac app reaches the opener at `http://127.0.0.1:8010/decide`.
@@ -109,6 +127,11 @@ The opener container reaches Laya at `http://host.docker.internal:8001/v1/system
 | **Carbon `RegisterEventHotKey`** | Configurable shortcut (default ⌃⌥Space) |
 | **NSWorkspace** | Launch the chosen `.app`; `terminate` / `forceTerminate` for quit / kill |
 | **Accessibility (`AXUIElement`)** | Close windows via the window close button. One Accessibility grant, not per-app Automation |
+| **CoreAudio** (`AudioObjectGetPropertyData`/`SetPropertyData`) | Master volume and mute on default output device (works on HDMI/DisplayPort) |
+| **DisplayServices** (`DisplayServicesSetBrightness`) | Native display brightness control (macOS 26 int status signature) |
+| **IOKit (`IOPMPowerSource`)** | Real battery percentage and power source state |
+| **ApplicationServices / CGEvent** | Synthetic ⌃⌘Q lock screen trigger |
+| **NSAppleScript** | Dark / light appearance toggle via System Events |
 | **NSStatusItem** | Menu-bar waveform. Left-click listens, right-click Settings / listening / Quit |
 | **UserDefaults `com.laya.opener`** | Listening master, per-trigger on/off (shortcut / hover / click / wake), wake phrases, hover dwell, shortcut, decision backend |
 | **LaunchAgent `com.laya.opener`** | Start at login. Restart on crash, stay dead on Quit |
@@ -125,13 +148,14 @@ Permissions in `Info.plist`: `NSMicrophoneUsageDescription`, `NSSpeechRecognitio
 | **`ThreadingHTTPServer`** | `GET /health`, `POST /decide` |
 | **stdlib `urllib`** | Call Laya. No FastAPI in this container |
 | **`catalog.json` / `opener/catalog.py`** | Curated daily apps + criteria |
+| **`opener/system_cmd.py`** | Host-parsed volume, brightness, appearance, lock, battery, panes, AirDrop (~3 ms) |
 | **`opener/scan.py`** | Spoken-form / alias generation (Swift has a twin) |
 
 ### Model
 
 | Tool | Used for |
 |---|---|
-| **Laya System-1** `POST /v1/systemone` | Choice head over installed apps |
+| **Laya System-1** `POST /v1/systemone` | Choice head over installed apps & system paraphrases |
 | **`model: english`** | Only checkpoint this product loads |
 | **CPU, `OMP_NUM_THREADS=4`** | `LAYA_DEVICE=cpu`, `LAYA_PRELOAD=1` |
 | **`HF_HUB_OFFLINE=1`** | Offline weights from `laya-upstream-model-cache` |
@@ -159,6 +183,7 @@ laya-app-opener/
 ├── opener/                        # runs ONLY in Docker
 │   ├── server.py                  # /health + /decide
 │   ├── loop.py                    # wake strip / stop / split / Laya / alias recover
+│   ├── system_cmd.py              # host-parsed volume, brightness, appearance, lock, battery, panes
 │   ├── settings.py                # wake match, hover/hotkey/backend normalize
 │   ├── client.py                  # questions_for + POST Laya
 │   ├── policy.py                  # Decision from probabilities
@@ -172,7 +197,7 @@ laya-app-opener/
 │   ├── NotchApp.swift             # UI, hotkey, hover, wake watch, listen loop, launch
 │   ├── Settings.swift             # Preferences + settings window (lockstep with opener/settings.py)
 │   ├── SpeechListen.swift         # MicListener: Apple Speech
-│   ├── Engine.swift               # catalog, aliases, /decide client, openApp
+│   ├── Engine.swift               # catalog, aliases, /decide client, openApp, native system controls
 │   ├── ExceptionCatch.[hm]        # ObjC try/catch around AVAudioEngine taps
 │   └── Info.plist
 ├── scripts/
@@ -180,7 +205,7 @@ laya-app-opener/
 │   ├── ensure_codesign.sh
 │   ├── install_launch_agent.sh
 │   └── com.laya.opener.plist      # template; __HOME__ substituted on install
-└── tests/                         # unit + live Laya
+└── tests/                         # 241 unit + live tests (including test_system_cmd.py)
 ```
 
 Python and Swift keep alias / speech-form / `preferCatalog` rules in lockstep. Change one, change the other.
@@ -418,6 +443,7 @@ Yes / yeah / open it on a pending confirm opens without calling Laya. No / cance
 | `refuse` | “Okay, I won't.” | nothing |
 | `chat` | collapses to idle | nothing |
 | `stop` | Goodbye | quit after 0.8 s |
+| `system` | Done + real outcome (e.g. “Volume 70%”) | Native executors: CoreAudio, DisplayServices, HID lock, AppleScript |
 
 ---
 
@@ -569,24 +595,28 @@ sequenceDiagram
   participant Engine as Engine.swift
   participant Opener as laya-opener :8010
   participant Laya as laya-upstream :8001
-  participant Mac as NSWorkspace
+  participant Mac as macOS Executors
 
   You->>Island: hover / click / shortcut / Hey Mac
   Island->>Speech: start MicListener
   Speech-->>Island: partials (preferCatalog)
   Island->>Island: considerPartial
-  Note over Island: named + not a negation?
+  Note over Island: named app & not system-ish & not negation?
   Island->>Opener: POST /decide (speculative)
-  Opener->>Opener: questions_for (5/6/15-way)
-  Opener->>Laya: POST /v1/systemone
-  Laya-->>Opener: probabilities
-  Opener->>Opener: policy.decide + alias recover
-  Opener-->>Island: action, apps, timing
-  Island->>Mac: openApplication
-  Mac-->>You: app frontmost
+  alt App prediction or system paraphrase
+    Opener->>Opener: questions_for (5/6/15-way)
+    Opener->>Laya: POST /v1/systemone
+    Laya-->>Opener: probabilities
+    Opener->>Opener: policy.decide + alias recover
+  else Fully-parsed system command (~3 ms)
+    Opener->>Opener: system_cmd.parse (skips Laya)
+  end
+  Opener-->>Island: action, apps, system, timing
+  Island->>Mac: openApplication or runSystem
+  Mac-->>You: app frontmost or system adjusted
   Speech-->>Island: silence 0.45s / 1.6s → finish
   Island->>Opener: POST /decide (final, if needed)
-  Island->>Island: Opened / icon / collapse
+  Island->>Island: Opened / Done / caption / collapse
 ```
 
 Launch sequence (`./launch`):
@@ -594,7 +624,7 @@ Launch sequence (`./launch`):
 1. Docker Desktop must be running.
 2. If `laya-upstream` already exists → `docker compose up -d --build --no-deps opener`. Else full compose.
 3. Poll `http://127.0.0.1:8010/health` up to 60 s. Need `{ "status": "ok", "laya": true }`.
-4. Open `~/Applications/LayaOpener.app` (build if missing).
+4. Open `~/Applications/Sayso.app` (build if missing).
 5. App wakes: `Engine.ensureLaya` (docker start both containers if health is down), warm `/decide` with `open notes`, then a listen hint (click / shortcut / wake word).
 
 ---
@@ -605,27 +635,28 @@ Launch sequence (`./launch`):
 - Swift / Info.plist / signing: `./scripts/build_app.sh`, then **restart the live process** (`ditto` overwrites the bundle but does not replace a running Mach-O):
 
   ```bash
-  kill $(pgrep -n LayaOpener); sleep 1
-  open "$HOME/Applications/LayaOpener.app"
+  kill $(pgrep -n Sayso); sleep 1
+  open "$HOME/Applications/Sayso.app"
   ```
 
-- Sign with **one stable identity** at `~/Applications/LayaOpener.app`. Ad-hoc (`codesign -s -`) changes CDHash every build; macOS treats each rebuild as a new app and re-prompts Speech + Mic.
+- Sign with **one stable identity** at `~/Applications/Sayso.app`. Ad-hoc (`codesign -s -`) changes CDHash every build; macOS treats each rebuild as a new app and re-prompts Speech + Mic.
 - `ensure_codesign.sh` must use `find-identity` **without** `-v` for the self-signed cert (`-v` reports 0 valid for NOT_TRUSTED and the script re-imports a second “Laya Opener”).
-- If the island vanishes: `pgrep -lf LayaOpener` first. Missing → newest `~/Library/Logs/DiagnosticReports/LayaOpener-*.ips`. A dead process looks identical to a missing hotkey.
+- If the island vanishes: `pgrep -lf Sayso` first. Missing → newest `~/Library/Logs/DiagnosticReports/Sayso-*.ips`. A dead process looks identical to a missing hotkey.
 
 ---
 
 ## 12. Tests
 
-`PYTHONPATH=. python3 -m unittest discover -s tests -q`
+`PYTHONPATH=. python3 -m unittest discover -s tests -q` (241 tests)
 
 | File | Locks |
 |---|---|
 | `test_alias` | spoken_key, longest alias, Hermes / Cloudflare forms, prefer_catalog |
 | `test_client` | named 5-way head, paraphrase 15-way, trailing `app`, ASR extras |
 | `test_policy` | unspecified never wins, named low bar, refuse, margin |
-| `test_loop` | stop, split, recover after Laya unspecified, wake strip |
-| `test_settings` | wake prefix + ASR forms, hover clamp, hotkey, backend switch |
+| `test_loop` | stop, split, recover after Laya unspecified, wake strip, mixed app + system execution |
+| `test_settings` | wake prefix + streaming hold, hover arming / parked pointer state machine, hotkey, backend switch |
+| `test_system_cmd` | host-level system command parsing (volume, brightness, appearance, lock, battery, panes, AirDrop), ASR numbers, Laya system head |
 | `test_scan` | compounds, singular ≥7, speech-phrase ranking under 100 |
 | `test_server` | every utterance forwarded; timing keys |
 | `test_live_laya` | real model + real catalog (`open her mess` → hermes, …) |

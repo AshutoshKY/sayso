@@ -20,9 +20,14 @@ Hover the purple dot, press **⌃⌥Space**, or say **Hey Mac**. A black island 
 ```
 You  →  notch island  →  POST :8010/decide     (laya-opener, this repo)
                               │
-                              ▼
-                     POST :8001/v1/systemone   (laya-upstream)
-                              │
+               ┌──────────────┴──────────────┐
+               ▼                             ▼
+       [host-parsed system]        POST :8001/v1/systemone (laya-upstream)
+         (~3 ms, skips Laya)                 │
+               │                             ▼
+               │                    installed app prediction /
+               │                    system-control paraphrase
+               └──────────────┬──────────────┘
                               ▼
             open / close / quit / kill / volume / brightness /
             dark mode / lock / battery / wifi / bluetooth / airdrop
@@ -70,10 +75,6 @@ You  →  notch island  →  POST :8010/decide     (laya-opener, this repo)
 
 Unknown name → nothing. No silent fallthrough to Chrome or Calendar. System captions report the real outcome — *“Volume 70%”*, *“Battery 100%, plugged in”* — never just your words echoed back.
 
-<p align="center">
-  <img src="docs/images/flow.svg" alt="Four-step flow: you speak, island hears, Laya decides, Mac does it" width="900">
-</p>
-
 ## Architecture
 
 ```mermaid
@@ -81,14 +82,14 @@ flowchart LR
   subgraph macHost["Mac host"]
     User["You"]
     Mic["Mic"]
-    Notch["LayaOpener.app<br/>notch island + menu bar"]
+    Notch["Sayso.app<br/>notch island + menu bar"]
     Speech["Apple Speech"]
     Scan["Catalog scan"]
-    Launch["NSWorkspace + Accessibility"]
+    Executors["Executors<br/>NSWorkspace · AX · CoreAudio<br/>DisplayServices · HID · AppleScript"]
   end
 
   subgraph docker["Docker"]
-    Opener["laya-opener :8010<br/>Python decide API"]
+    Opener["laya-opener :8010<br/>Python decide API<br/>host system parser + policy"]
     Laya["laya-upstream :8001<br/>Laya english, CPU"]
   end
 
@@ -98,16 +99,16 @@ flowchart LR
   Speech -->|partial + final transcript| Notch
   Scan --> Notch
   Notch -->|POST /decide + catalog + running| Opener
-  Opener -->|POST /v1/systemone| Laya
-  Laya -->|choice + probabilities| Opener
-  Opener -->|action + apps + timing| Notch
-  Notch --> Launch
+  Opener -.->|app prediction or paraphrase| Laya
+  Laya -.->|choice + probabilities| Opener
+  Opener -->|action + apps + system + timing| Notch
+  Notch --> Executors
 ```
 
 | Process | Where | Port | Job |
 |---|---|---|---|
-| `LayaOpener.app` | `~/Applications/LayaOpener.app` | — | Notch UI, mic, Apple Speech, catalog scan, execute |
-| `laya-opener` | Docker, **this repo** | `127.0.0.1:8010` | Decide API. Builds the Laya prompt. Policy + alias recovery. |
+| `Sayso.app` | `~/Applications/Sayso.app` | — | Notch UI, mic, Apple Speech, catalog scan, app execution & native system controls |
+| `laya-opener` | Docker, **this repo** | `127.0.0.1:8010` | Decide API. System command parsing (~3 ms), Laya prompt builder, policy, alias recovery |
 | `laya-upstream` | Docker, **separate image** | `127.0.0.1:8001` | Laya System-1 English checkpoint on CPU |
 
 ```mermaid
@@ -117,16 +118,20 @@ sequenceDiagram
   participant Speech as Apple Speech
   participant Opener as laya-opener :8010
   participant Laya as laya-upstream :8001
-  participant Mac as NSWorkspace
+  participant Mac as macOS Executors
 
   You->>Island: hover / click / shortcut / Hey Mac
   Island->>Speech: start MicListener
   Speech-->>Island: partials (prefer catalog spelling)
   Island->>Opener: POST /decide (fires as each new name lands)
-  Opener->>Laya: POST /v1/systemone
-  Laya-->>Opener: probabilities
-  Opener-->>Island: action, apps, timing
-  Island->>Mac: open / close / quit
+  alt App prediction or system paraphrase
+    Opener->>Laya: POST /v1/systemone
+    Laya-->>Opener: probabilities
+  else Fully-parsed system command (~3 ms)
+    Note over Opener: Parse volume, brightness, lock, dark mode, etc.
+  end
+  Opener-->>Island: action, apps, system, timing
+  Island->>Mac: open / close / quit / system controls
   Speech-->>Island: silence → finish
 ```
 
@@ -134,9 +139,10 @@ How the pieces fit:
 
 1. The island listens with the Mac’s own speech recognizer.
 2. It asks the decide service on `localhost:8010` — “what did they mean?”
-3. That service asks Laya on `localhost:8001` — still this machine, still Docker.
-4. Laya returns scores. Policy + spoken-name aliases pick the app.
-5. The island opens, closes, or quits it.
+3. Fully-parsed system commands (volume, brightness, lock, dark mode, battery, etc.) resolve on the host in ~3 ms without calling Laya.
+4. For app requests and paraphrases, that service asks Laya on `localhost:8001` — still this machine, still Docker.
+5. Laya returns scores. Policy + spoken-name aliases pick the app.
+6. The island opens, closes, or quits apps, or directly adjusts macOS settings (CoreAudio, DisplayServices, HID, AppleScript).
 
 Full internals: [docs/how-it-works.md](docs/how-it-works.md). Speech notes: [docs/speech-recognition.md](docs/speech-recognition.md). Latency notes: [docs/voice-to-open-latency.md](docs/voice-to-open-latency.md).
 
@@ -163,7 +169,7 @@ cd sayso
 1. Refuse if Docker is not running (and try to open Docker Desktop).
 2. `docker compose up -d --build` (or rebuild only `opener` if `laya-upstream` is already a container).
 3. Poll `http://127.0.0.1:8010/health` for up to 60 s.
-4. Build `LayaOpener.app` if it is missing, then `open` it.
+4. Build `Sayso.app` if it is missing, then `open` it.
 
 Check the pods:
 
@@ -187,10 +193,10 @@ Do **not** run `python -m opener` or any Laya process on the Mac. Inference and 
 
 ```bash
 ./scripts/build_app.sh
-open "$HOME/Applications/LayaOpener.app"
+open "$HOME/Applications/Sayso.app"
 ```
 
-That compiles the Swift accessory, signs it with a stable “Laya Opener” identity (so TCC grants survive rebuilds), and copies it to `~/Applications/LayaOpener.app`.
+That compiles the Swift accessory, signs it with a stable “Laya Opener” identity (so TCC grants survive rebuilds), and copies it to `~/Applications/Sayso.app`.
 
 ### Optional: start at login
 
@@ -213,11 +219,11 @@ curl -sS -m 3 http://127.0.0.1:8010/health
 
 ```bash
 ./scripts/build_app.sh
-kill $(pgrep -n LayaOpener); sleep 1
-open "$HOME/Applications/LayaOpener.app"
+kill $(pgrep -n Sayso); sleep 1
+open "$HOME/Applications/Sayso.app"
 ```
 
-`ditto` overwrites the bundle but does not replace a live process. Confirm a new pid with `pgrep -lf LayaOpener`.
+`ditto` overwrites the bundle but does not replace a live process. Confirm a new pid with `pgrep -lf Sayso`.
 
 ## Tests
 
@@ -261,7 +267,7 @@ sayso/
 │   ├── system_cmd.py              # system controls: host parse + Laya fallback + labels
 │   ├── alias.py                   # spoken_key, resolve_alias, prefer_catalog
 │   └── …
-├── native/notch/                  # Swift accessory (LayaOpener.app)
+├── native/notch/                  # Swift accessory (Sayso.app)
 ├── scripts/
 │   ├── build_app.sh
 │   ├── ensure_codesign.sh

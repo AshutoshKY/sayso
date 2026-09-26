@@ -22,7 +22,7 @@ _STOP = (
     "we are done",
 )
 
-_PROTECTED = frozenset(("finder", "layaopener"))
+_PROTECTED = frozenset(("finder", "layaopener", "sayso"))
 
 _YES = (
     "yes",
