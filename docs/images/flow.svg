@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-label="Sayso four-step flow: speak, hear, decide, open">
+  <rect width="1600" height="900" fill="#080a10"/>
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#161c28" stroke-width="0.8"/>
+    </pattern>
+  </defs>
+  <rect width="1600" height="900" fill="url(#grid)"/>
+
+  <text x="72" y="64" fill="#f5f5f5" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="32" font-weight="700">Sayso</text>
+  <text x="72" y="98" fill="#8c8c8c" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="18">You speak → island hears → on-box Laya decides → Mac does it. No cloud LLM.</text>
+
+  <!-- cards -->
+  <g>
+    <rect x="72" y="160" width="330" height="360" rx="18" fill="#101420" stroke="#a85cfa" stroke-width="1.6"/>
+    <circle cx="108" cy="204" r="18" fill="#a85cfa"/>
+    <text x="108" y="210" text-anchor="middle" fill="#0c0c10" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16" font-weight="700">1</text>
+    <text x="96" y="268" fill="#f5f5f5" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="24" font-weight="700">You speak</text>
+    <text x="96" y="312" fill="#a0a6b4" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16">Hey Mac</text>
+    <text x="96" y="340" fill="#a0a6b4" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16">Control-Option-Space</text>
+    <text x="96" y="368" fill="#a0a6b4" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16">hover · click</text>
+  </g>
+  <polygon points="414,340 436,328 436,352" fill="#a85cfa"/>
+
+  <g>
+    <rect x="448" y="160" width="330" height="360" rx="18" fill="#101420" stroke="#5ed2e6" stroke-width="1.6"/>
+    <circle cx="484" cy="204" r="18" fill="#5ed2e6"/>
+    <text x="484" y="210" text-anchor="middle" fill="#0c0c10" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16" font-weight="700">2</text>
+    <text x="472" y="268" fill="#f5f5f5" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="24" font-weight="700">Island hears</text>
+    <text x="472" y="312" fill="#a0a6b4" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16">Apple Speech</text>
+    <text x="472" y="340" fill="#a0a6b4" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16">en-US · live partials</text>
+    <text x="472" y="368" fill="#a0a6b4" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16">catalog spelling wins</text>
+  </g>
+  <polygon points="790,340 812,328 812,352" fill="#5ed2e6"/>
+
+  <g>
+    <rect x="824" y="160" width="330" height="360" rx="18" fill="#101420" stroke="#7dd98a" stroke-width="1.6"/>
+    <circle cx="860" cy="204" r="18" fill="#7dd98a"/>
+    <text x="860" y="210" text-anchor="middle" fill="#0c0c10" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16" font-weight="700">3</text>
+    <text x="848" y="268" fill="#f5f5f5" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="24" font-weight="700">Laya decides</text>
+    <text x="848" y="312" fill="#a0a6b4" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16">Docker CPU · :8001</text>
+    <text x="848" y="340" fill="#a0a6b4" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16">~250 ms named</text>
+    <text x="848" y="368" fill="#a0a6b4" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16">~400 ms paraphrase</text>
+  </g>
+  <polygon points="1166,340 1188,328 1188,352" fill="#7dd98a"/>
+
+  <g>
+    <rect x="1200" y="160" width="352" height="360" rx="18" fill="#101420" stroke="#fac45a" stroke-width="1.6"/>
+    <circle cx="1236" cy="204" r="18" fill="#fac45a"/>
+    <text x="1236" y="210" text-anchor="middle" fill="#0c0c10" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16" font-weight="700">4</text>
+    <text x="1224" y="268" fill="#f5f5f5" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="24" font-weight="700">Mac does it</text>
+    <text x="1224" y="312" fill="#a0a6b4" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16">NSWorkspace</text>
+    <text x="1224" y="340" fill="#a0a6b4" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16">open · close · quit</text>
+    <text x="1224" y="368" fill="#a0a6b4" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="16">33–53 ms launch</text>
+  </g>
+
+  <text x="72" y="580" fill="#8c8c8c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">LayaOpener.app  →  POST :8010/decide  →  POST :8001/v1/systemone  →  NSWorkspace</text>
+  <text x="72" y="612" fill="#8c8c8c" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="15">Host never talks to ChatGPT, Claude, or Gemini. Once the image is loaded, the stack is offline.</text>
+</svg>
