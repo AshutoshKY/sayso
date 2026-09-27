@@ -229,17 +229,20 @@ def parse_answers(payload):
     return out
 
 
-def predict(text, catalog, url=None, opener=None, timeout=30, model="english"):
+def predict(text, catalog, url=None, opener=None, timeout=30, model="english", token=None):
     target = url or DEFAULT_URL
     body = {
         "state": text,
         "questions": questions_for(text, catalog),
         "model": model,
     }
+    headers = {"content-type": "application/json"}
+    if token:
+        headers["authorization"] = "Bearer %s" % token
     req = Request(
         target,
         data=json.dumps(body).encode(),
-        headers={"content-type": "application/json"},
+        headers=headers,
         method="POST",
     )
     do_open = opener or urlopen

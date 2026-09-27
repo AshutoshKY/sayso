@@ -21,7 +21,12 @@ class DecidePayloadTests(unittest.TestCase):
                 "app": {"choice": "notes", "answer_confidence": 0.88},
             }
 
-        out = decide_payload("open notes", catalog=CATALOG, predict_fn=predict)
+        out = decide_payload(
+            "open notes",
+            catalog=CATALOG,
+            predict_fn=predict,
+            backend="laya",
+        )
         self.assertEqual(called[0][0], "open notes")
         self.assertEqual(out["action"], "open")
         self.assertEqual(out["app"], "notes")
@@ -41,7 +46,12 @@ class DecidePayloadTests(unittest.TestCase):
                 "app": {"choice": "notes", "answer_confidence": 0.9},
             }
 
-        out = decide_payload("open notes", catalog=CATALOG, predict_fn=predict)
+        out = decide_payload(
+            "open notes",
+            catalog=CATALOG,
+            predict_fn=predict,
+            backend="laya",
+        )
         self.assertIn("timing", out)
         self.assertIn("total_ms", out["timing"])
         self.assertIsNotNone(out["timing"]["laya_ms"])
@@ -56,13 +66,31 @@ class DecidePayloadTests(unittest.TestCase):
                 "app": {"choice": "notes", "answer_confidence": 0.88},
             }
 
-        out = decide_payload("hey mac open notes", catalog=CATALOG, predict_fn=predict)
+        out = decide_payload(
+            "hey mac open notes",
+            catalog=CATALOG,
+            predict_fn=predict,
+            backend="laya",
+        )
         self.assertEqual(called, ["open notes"])
         self.assertEqual(out["app"], "notes")
 
     def test_unknown_backend_does_not_call_laya(self):
         def predict(text, catalog):
-            raise AssertionError("jev is not wired")
+            raise AssertionError("unknown engine must not call a model")
+
+        out = decide_payload(
+            "open notes",
+            catalog=CATALOG,
+            predict_fn=predict,
+            backend="nope",
+        )
+        self.assertEqual(out["action"], "ask")
+        self.assertEqual(out["reason"], "backend-unavailable")
+
+    def test_jev_without_token_does_not_call_predict(self):
+        def predict(text, catalog):
+            raise AssertionError("missing key must not call Jev")
 
         out = decide_payload(
             "open notes",
@@ -140,6 +168,7 @@ class DecidePayloadTests(unittest.TestCase):
             "open youtube in brave",
             catalog=catalog,
             predict_fn=predict,
+            backend="laya",
         )
         self.assertEqual(out["action"], "open_url")
         self.assertEqual(out["app"], "brave")

@@ -263,12 +263,27 @@ def handle_utterance(
         # Prefer host-named ids when Apple omitted commas
         # ("open calculator antigravity and notes").
         parts = ["open " + app_id for app_id in named]
+    # Explicit Off only. Missing key (older callers / unit tests) still uses Laya.
+    host_only = (settings or {}).get("decision_backend") == "host"
     if len(parts) <= 1:
         verb = lifecycle_verb(uttered)
         if not verb and not target:
             sys_hit = parse_system(uttered)
             if sys_hit:
                 return Decision("system", system=[sys_hit], reason="host")
+        if host_only:
+            recovered = exact_installed_id(uttered, catalog) or resolve_alias(uttered, catalog)
+            if recovered:
+                if verb:
+                    if recovered in _PROTECTED:
+                        return Decision("ask", reason="protected")
+                    return _lifecycle_decision(verb, [recovered], running)
+                if target:
+                    return _url_decision(target, recovered, None, catalog)
+                return Decision("open", app=recovered, apps=[recovered], reason="host")
+            if target:
+                return _url_decision(target, None, None, catalog)
+            return Decision("ask", reason="host")
         laya_input = laya_text(uttered, catalog) if target else uttered
         laya = predict_fn(laya_input, catalog)
         app_id, decision = _resolve_app(laya_input, catalog, laya, thresholds)
@@ -296,6 +311,28 @@ def handle_utterance(
             system_actions.append(cmd)
             return reason
         return None
+
+    if host_only:
+        for part in parts:
+            if not verb:
+                sys_hit = parse_system(part)
+                if sys_hit:
+                    collect_system(sys_hit, "host")
+                    continue
+            recovered = exact_installed_id(part, catalog) or resolve_alias(part, catalog)
+            if recovered and recovered not in opened:
+                opened.append(recovered)
+        if verb:
+            if not opened:
+                return Decision("ask", reason="which-app")
+            return _lifecycle_decision(verb, opened, running)
+        if target and opened:
+            return _url_decision(target, opened[0], None, catalog)
+        if opened:
+            return Decision("open", app=opened[0], apps=opened, system=system_actions, reason="host")
+        if system_actions:
+            return Decision("system", system=system_actions, reason="host")
+        return Decision("ask", reason="host")
 
     for part in parts:
         if not verb:

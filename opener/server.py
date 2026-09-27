@@ -1,7 +1,8 @@
-"""Decide API. Runs in the laya-opener container. Calls laya-upstream."""
+"""Decide payload + optional HTTP wrapper. Product path is python3 -m opener decide."""
 
 import json
 import os
+import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import URLError
@@ -9,6 +10,7 @@ from urllib.request import urlopen
 
 from opener.catalog import APPS
 from opener.client import predict
+from opener.engine import engine_spec, unavailable_payload
 from opener.loop import handle_utterance, spoken
 from opener.settings import normalize_settings
 
@@ -35,6 +37,7 @@ def decide_payload(
     settings=None,
     running=None,
     pending=None,
+    token=None,
 ):
     uttered = (text or "").strip()
     if not uttered:
@@ -47,25 +50,23 @@ def decide_payload(
         }
     cfg = normalize_settings(settings)
     requested = backend if backend is not None else cfg["decision_backend"]
-    engine = str(requested or "laya").strip().lower() or "laya"
+    engine = str(requested or "host").strip().lower() or "host"
     cfg["decision_backend"] = engine
-    # Switch lives here. Wire a new backend by adding a branch; do not fall
-    # through to Laya when the user asked for something else.
-    if engine != "laya":
-        label = engine[:1].upper() + engine[1:]
-        return {
-            "action": "ask",
-            "app": None,
-            "apps": [],
-            "system": [],
-            "reason": "backend-unavailable",
-            "spoken": "%s is not wired yet. Stay on Laya." % label,
-        }
+    spec = engine_spec(engine, token=token)
     cat = catalog if catalog is not None else APPS
     pred = predict_fn or predict
     timed = {"laya_ms": None}
+    host_only = spec["engine"] == "host"
 
     def wrapped(text, catalog):
+        if host_only:
+            raise AssertionError("host must not call a model")
+        if not spec["available"]:
+            return {
+                "intent": {"choice": None, "answer_confidence": 0.0, "probabilities": {}},
+                "app": {"choice": None, "answer_confidence": 0.0, "probabilities": {}},
+                "system": {"choice": None, "answer_confidence": 0.0, "probabilities": {}},
+            }
         started = time.perf_counter()
         out = pred(text, catalog)
         timed["laya_ms"] = round((time.perf_counter() - started) * 1000, 1)
@@ -82,6 +83,20 @@ def decide_payload(
         pending=list(pending or []),
     )
     total_ms = round((time.perf_counter() - started) * 1000, 1)
+    if host_only:
+        if decision.reason in ("laya", "unspecified", "which-app", "not-launch"):
+            decision.reason = "host"
+    elif not spec["available"] and timed["laya_ms"] is None and decision.reason not in (
+        "host",
+        "clipboard",
+        "confirm",
+        "wake",
+        "stop",
+        "empty",
+    ):
+        # Host-parsed volume / clipboard / yes-no never need a model.
+        # App prediction with a missing Jev key or unknown engine still refuses.
+        return unavailable_payload(spec)
     payload = {
         "action": decision.action,
         "app": decision.app,
@@ -103,6 +118,7 @@ def decide_payload(
             total_ms,
             timed["laya_ms"] or 0,
         ),
+        file=sys.stderr,
         flush=True,
     )
     return payload

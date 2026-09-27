@@ -107,17 +107,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
+            let usingLaya = self.prefs.decisionBackend == "laya"
             DispatchQueue.main.async {
                 self.state.mode = .waking
-                self.state.caption = "Waking Laya…"
+                self.state.caption = usingLaya ? "Waking Laya…" : "Starting Sayso…"
                 self.resize(expand: true, animate: true)
             }
-            let ready = Engine.ensureLaya(
-                container: self.catalog.container,
-                layaContainer: self.catalog.laya_container ?? "laya-upstream"
-            )
+            let ready: Bool
+            if usingLaya {
+                ready = Engine.ensureLaya(
+                    layaContainer: self.catalog.laya_container ?? "laya-upstream"
+                )
+            } else {
+                ready = true
+            }
             if ready {
-                _ = Engine.remoteDecide(text: "open notes", catalog: self.catalog)
+                _ = Engine.localDecide(
+                    text: "open notes",
+                    catalog: self.catalog,
+                    settings: self.prefs.payload
+                )
             }
             DispatchQueue.main.async {
                 if ready {
@@ -213,6 +222,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             cancelListen()
         } else if prefs.micNeeded {
             scheduleWakeWatch()
+        }
+        if prefs.decisionBackend == "laya" {
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                guard let self else { return }
+                _ = Engine.ensureLaya(
+                    layaContainer: self.catalog.laya_container ?? "laya-upstream"
+                )
+            }
         }
     }
 
@@ -1108,8 +1125,8 @@ struct IslandChrome: View {
         if state.caption.isEmpty {
             switch state.mode {
             case .listening: return "Speak an app name"
-            case .waking: return "Waking Laya…"
-            default: return "Laya"
+            case .waking: return "Starting Sayso…"
+            default: return "Sayso"
             }
         }
         return state.caption

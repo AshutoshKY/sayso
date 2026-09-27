@@ -13,7 +13,7 @@ venv/
 *.swp
 *~
 
-# Built app + compiled helpers (rebuild with ./scripts/build_app.sh)
+# Built app + compiled helpers + release zip/dmg (rebuild with ./scripts/build_app.sh / package_release.sh)
 dist/
 native/listen
 native/notch/.build/

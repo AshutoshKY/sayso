@@ -1,9 +1,7 @@
 {
   "laya_url": "http://127.0.0.1:8001/v1/systemone",
-  "opener_url": "http://127.0.0.1:8010/decide",
-  "opener_health": "http://127.0.0.1:8010/health",
-  "container": "laya-opener",
   "laya_container": "laya-upstream",
+  "container": "laya-upstream",
   "thresholds": {
     "intent": 0.72,
     "app": 0.7,

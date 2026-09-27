@@ -52,41 +52,20 @@ class EnsureTests(unittest.TestCase):
 
         self.assertTrue(ensure_laya(runner=runner, fetcher=fetcher, sleeps=lambda _: None, tries=3))
         self.assertEqual(calls[0], ["docker", "start", CONTAINER])
+        self.assertEqual(CONTAINER, "laya-upstream")
+        started = [cmd[2] for cmd in calls if cmd[:2] == ["docker", "start"]]
+        self.assertNotIn("laya-opener", started)
 
 
 class ComposeFileTests(unittest.TestCase):
-    def test_compose_declares_opener_and_laya(self):
+    def test_compose_declares_only_laya(self):
         from pathlib import Path
 
         text = (Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text()
-        self.assertIn("laya-opener", text)
         self.assertIn("laya-upstream", text)
-        self.assertIn("8010", text)
+        self.assertNotIn("laya-opener", text)
+        self.assertNotIn("8010", text)
         self.assertIn("restart: unless-stopped", text)
-
-    def test_opener_health_stays_200_when_laya_is_down(self):
-        from opener import server as srv
-
-        class Fake(srv.Handler):
-            def __init__(self):
-                self.path = "/health"
-
-        seen = {}
-
-        def capture(self, code, payload):
-            seen["code"] = code
-            seen["payload"] = payload
-
-        Fake._json = capture
-        orig = srv._laya_ok
-        srv._laya_ok = lambda timeout=2: False
-        try:
-            Fake.do_GET(Fake())
-        finally:
-            srv._laya_ok = orig
-        self.assertEqual(seen["code"], 200)
-        self.assertEqual(seen["payload"]["status"], "degraded")
-        self.assertFalse(seen["payload"]["laya"])
 
 
 if __name__ == "__main__":

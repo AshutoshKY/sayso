@@ -79,6 +79,59 @@ class HandleUtteranceTests(unittest.TestCase):
         self.assertEqual((d.action, d.app, d.reason), ("open", "brave", "laya"))
         self.assertEqual(called, ["open the browser"])
 
+    def test_host_backend_skips_model_for_named_app(self):
+        called = []
+
+        def predict(text, catalog):
+            called.append(text)
+            raise AssertionError("host must not call a model")
+
+        d = handle_utterance(
+            "open notes",
+            CATALOG,
+            {},
+            predict,
+            settings={"decision_backend": "host"},
+        )
+        self.assertEqual((d.action, d.app, d.reason), ("open", "notes", "host"))
+        self.assertEqual(called, [])
+
+    def test_host_backend_does_not_open_paraphrase(self):
+        called = []
+
+        def predict(text, catalog):
+            called.append(text)
+            return _laya("notes")
+
+        d = handle_utterance(
+            "jot something down",
+            CATALOG,
+            {},
+            predict,
+            settings={"decision_backend": "host"},
+        )
+        self.assertEqual((d.action, d.app, d.reason), ("ask", None, "host"))
+        self.assertEqual(called, [])
+
+    def test_host_backend_opens_multiple_named_apps(self):
+        called = []
+
+        def predict(text, catalog):
+            called.append(text)
+            raise AssertionError("host must not call a model")
+
+        d = handle_utterance(
+            "open notes and safari",
+            CATALOG,
+            {},
+            predict,
+            settings={"decision_backend": "host"},
+        )
+        self.assertEqual(d.action, "open")
+        self.assertEqual(d.apps, ["notes", "safari"])
+        self.assertEqual(d.reason, "host")
+        self.assertEqual(called, [])
+
     def test_paraphrase_calls_laya(self):
         called = []
 

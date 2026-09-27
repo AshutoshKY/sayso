@@ -234,6 +234,63 @@ class PredictTests(unittest.TestCase):
         self.assertEqual(parsed["intent"]["choice"], None)
         self.assertEqual(parsed["app"]["choice"], None)
 
+    def test_predict_sends_authorization_when_token_given(self):
+        captured = {}
+
+        class FakeResp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {"answers": {"app": {"choice": "notes", "confidence": 0.95}}}
+                ).encode()
+
+        def opener(req, timeout=0):
+            captured["url"] = req.full_url
+            captured["headers"] = dict(req.header_items())
+            captured["body"] = json.loads(req.data.decode())
+            return FakeResp()
+
+        parsed = predict(
+            "open notes",
+            MINI,
+            url="https://api.typesafe.ai/v1/systemone",
+            model="jev-latest",
+            token="secret-token",
+            opener=opener,
+        )
+        self.assertEqual(captured["url"], "https://api.typesafe.ai/v1/systemone")
+        self.assertEqual(captured["body"]["model"], "jev-latest")
+        headers = {k.lower(): v for k, v in captured["headers"].items()}
+        self.assertEqual(headers.get("authorization"), "Bearer secret-token")
+        self.assertEqual(parsed["app"]["choice"], "notes")
+        self.assertEqual(parsed["app"]["answer_confidence"], 0.95)
+
+    def test_predict_omits_authorization_without_token(self):
+        captured = {}
+
+        class FakeResp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return json.dumps({"answers": {"app": {"choice": "notes"}}}).encode()
+
+        def opener(req, timeout=0):
+            captured["headers"] = dict(req.header_items())
+            return FakeResp()
+
+        predict("open notes", MINI, opener=opener)
+        headers = {k.lower(): v for k, v in captured["headers"].items()}
+        self.assertNotIn("authorization", headers)
+
 
 if __name__ == "__main__":
     unittest.main()

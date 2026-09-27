@@ -24,7 +24,7 @@ struct CatalogFile: Codable {
     var laya_url: String
     var opener_url: String?
     var opener_health: String?
-    var container: String
+    var container: String?
     var laya_container: String?
     var thresholds: Thresholds
     var intent: [String: String]
@@ -813,7 +813,7 @@ enum Engine {
         task.waitUntilExit()
     }
 
-    static func healthOK(_ raw: String = "http://127.0.0.1:8010/health") -> Bool {
+    static func healthOK(_ raw: String = "http://127.0.0.1:8001/health") -> Bool {
         guard let url = URL(string: raw) else { return false }
         var request = URLRequest(url: url)
         request.timeoutInterval = 2
@@ -829,15 +829,35 @@ enum Engine {
         return ok
     }
 
-    static func ensureLaya(container: String, layaContainer: String = "laya-upstream") -> Bool {
-        if healthOK() { return true }
+    static func ensureLaya(layaContainer: String = "laya-upstream") -> Bool {
+        let health = "http://127.0.0.1:8001/health"
+        if healthOK(health) { return true }
         run([dockerBin(), "start", layaContainer])
-        run([dockerBin(), "start", container])
-        for _ in 0 ..< 30 {
-            if healthOK() { return true }
-            Thread.sleep(forTimeInterval: 0.4)
+        for _ in 0 ..< 40 {
+            if healthOK(health) { return true }
+            Thread.sleep(forTimeInterval: 0.5)
         }
-        return healthOK()
+        return healthOK(health)
+    }
+
+    static func pythonBin() -> String {
+        for path in ["/usr/bin/python3", "/opt/homebrew/bin/python3", "/usr/local/bin/python3"] {
+            if FileManager.default.isExecutableFile(atPath: path) { return path }
+        }
+        return "/usr/bin/python3"
+    }
+
+    static func openerRoot() -> URL? {
+        if let bundled = Bundle.main.resourceURL?.appendingPathComponent("opener/__main__.py"),
+           FileManager.default.fileExists(atPath: bundled.path)
+        {
+            return Bundle.main.resourceURL
+        }
+        let here = URL(fileURLWithPath: #file).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        if FileManager.default.fileExists(atPath: here.appendingPathComponent("opener/__main__.py").path) {
+            return here
+        }
+        return nil
     }
 
     static func predict(text: String, catalog: CatalogFile) -> (LayaHead, LayaHead) {
@@ -912,7 +932,7 @@ enum Engine {
         if isStop(uttered) {
             return Decision(action: "stop", app: nil, reason: "stop")
         }
-        return remoteDecide(
+        return localDecide(
             text: uttered,
             catalog: catalog,
             settings: settings,
@@ -921,16 +941,15 @@ enum Engine {
         )
     }
 
-    static func remoteDecide(
+    static func localDecide(
         text: String,
         catalog: CatalogFile,
         settings: [String: Any] = [:],
         running: [String] = [],
         pending: [String] = []
     ) -> Decision {
-        let endpoint = catalog.opener_url ?? "http://127.0.0.1:8010/decide"
-        guard let url = URL(string: endpoint) else {
-            return Decision(action: "ask", app: nil, reason: "bad-url")
+        guard let root = openerRoot() else {
+            return Decision(action: "ask", app: nil, reason: "missing-opener")
         }
         var apps: [String: [String: Any]] = [:]
         for (id, spec) in catalog.apps {
@@ -945,6 +964,7 @@ enum Engine {
             "catalog": apps,
             "running": running,
             "pending": pending,
+            "laya_url": catalog.laya_url,
         ]
         if !settings.isEmpty {
             body["settings"] = settings
@@ -952,27 +972,58 @@ enum Engine {
                 body["backend"] = backend
             }
         }
+        let token = Preferences.shared.jevAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !token.isEmpty {
+            body["token"] = token
+        }
         guard let data = try? JSONSerialization.data(withJSONObject: body) else {
             return Decision(action: "ask", app: nil, reason: "encode")
         }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "content-type")
-        request.httpBody = data
-        request.timeoutInterval = 30
-        let sem = DispatchSemaphore(value: 0)
-        var payload: [String: Any] = [:]
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: pythonBin())
+        task.arguments = ["-m", "opener", "decide"]
+        task.currentDirectoryURL = root
+        task.environment = ProcessInfo.processInfo.environment.merging([
+            "PYTHONPATH": root.path,
+            "PYTHONUNBUFFERED": "1",
+        ]) { _, new in new }
+        let stdin = Pipe()
+        let stdout = Pipe()
+        let stderr = Pipe()
+        task.standardInput = stdin
+        task.standardOutput = stdout
+        task.standardError = stderr
         let t0 = Date()
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            if let data,
-               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            {
-                payload = obj
-            }
-            sem.signal()
-        }.resume()
-        _ = sem.wait(timeout: .now() + 31)
-        NSLog("laya-opener http /decide %.0fms", Date().timeIntervalSince(t0) * 1000)
+        do {
+            try task.run()
+        } catch {
+            NSLog("sayso decide spawn failed: %@", error.localizedDescription)
+            return Decision(action: "ask", app: nil, reason: "python")
+        }
+        stdin.fileHandleForWriting.write(data)
+        stdin.fileHandleForWriting.closeFile()
+        task.waitUntilExit()
+        let raw = stdout.fileHandleForReading.readDataToEndOfFile()
+        NSLog("sayso decide %.0fms status=%d", Date().timeIntervalSince(t0) * 1000, task.terminationStatus)
+        guard let obj = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] else {
+            let err = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            NSLog("sayso decide bad output: %@", err)
+            return Decision(action: "ask", app: nil, reason: "decode")
+        }
+        return decision(from: obj)
+    }
+
+    static func remoteDecide(
+        text: String,
+        catalog: CatalogFile,
+        settings: [String: Any] = [:],
+        running: [String] = [],
+        pending: [String] = []
+    ) -> Decision {
+        localDecide(text: text, catalog: catalog, settings: settings, running: running, pending: pending)
+    }
+
+    static func decision(from payload: [String: Any]) -> Decision {
         let action = payload["action"] as? String ?? "ask"
         let app = payload["app"] as? String
         let opened = payload["apps"] as? [String] ?? []

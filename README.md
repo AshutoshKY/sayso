@@ -6,7 +6,7 @@ Speak to Mac. The named app opens — and the Mac itself obeys: volume, brightne
   <img src="docs/images/hero.png" alt="Sayso — the real notch island after saying 'open notes': Notes app icon, OPENED, Notes" width="840">
 </p>
 
-Hover the purple dot, press **⌃⌥Space**, or say **Hey Mac**. A black island drops. You talk. Laya — running **on this Mac, in Docker, no internet** — picks the installed app. Sayso opens it, closes its windows, or quits it.
+Hover the purple dot, press **⌃⌥Space**, or say **Hey Mac**. A black island drops. You talk. Decide runs **inside Sayso**. Default is **Off** — named apps, system settings, and URLs stay on-device. Turn on **Laya** (local Docker model, no internet) or **Jev** (TypeSafe API, no Docker) when you want paraphrases.
 
 <p align="center">
   <img src="docs/images/states.png" alt="The three real states — Idle: purple dot by the notch. Listening: live EQ and transcript with Cancel. Opened: the app launches in about 1.4 s." width="840">
@@ -14,15 +14,16 @@ Hover the purple dot, press **⌃⌥Space**, or say **Hey Mac**. A black island 
 
 *Both images show real captures of the live island — no mockups.*
 
-> **No cloud LLM.** Not ChatGPT. Not Claude. Not Gemini. Speech is Apple Speech. The decision is Laya System-1 on CPU. Once the image is loaded, the stack is offline.
+> **Decide is on-device.** Speech is Apple Speech. The decide loop (parse, policy, aliases) lives in Sayso. Default engine is Off. Laya is an optional local System One model in Docker. Jev is an optional hosted System One model. Named apps, system settings, and URLs do not need either.
 
 ```
-You  →  notch island  →  POST :8010/decide     (laya-opener, this repo)
+You  →  notch island  →  in-app decide     (Python bundled in Sayso)
                               │
                ┌──────────────┴──────────────┐
                ▼                             ▼
-       [host-parsed system]        POST :8001/v1/systemone (laya-upstream)
-         (~3 ms, skips Laya)                 │
+       [host: apps / settings / URLs]   POST /v1/systemone
+         (~3–7 ms, default Off)           Laya :8001  or  Jev HTTPS
+               │                             │
                │                             ▼
                │                    installed app prediction /
                │                    system-control paraphrase
@@ -34,19 +35,19 @@ You  →  notch island  →  POST :8010/decide     (laya-opener, this repo)
 
 | | |
 |---|---|
-| **~250 ms** | named-app decide (p50, 5-way head) |
-| **~400 ms** | paraphrase decide (daily 15-way set) |
+| **~3–7 ms** | named app / system / URL (default Off, no model) |
+| **~250 ms** | named-app decide with Laya (p50, 5-way head) |
+| **~400 ms** | paraphrase decide (needs Laya or Jev) |
 | **33–53 ms** | app launch (`NSWorkspace`) |
-| **~3 ms** | system-command decide (host parse, no Laya call) |
-| **241** | unit tests |
-| **0** | cloud LLM calls |
+| **241+** | unit tests |
+| **optional** | Jev (hosted). Laya stays local and offline. |
 | **macOS 14+** | Apple Silicon |
-| **Python + Swift** | decide API in Docker · island on the host |
+| **Python + Swift** | decide loop in the app · Laya is one Docker model |
 
 | You say | What happens |
 |---|---|
 | *open notes* | Opens Notes |
-| *jot something down* | Opens Notes (paraphrase) |
+| *jot something down* | Opens Notes **only with Laya or Jev on** |
 | *open anti gravity* | Opens Antigravity |
 | *open her mess* / *open hermits* | Opens Hermes (Apple misheard; we still got it) |
 | *open podcast and notes* | Opens both, as each name lands |
@@ -87,9 +88,9 @@ flowchart LR
     Executors["Executors<br/>NSWorkspace · AX · CoreAudio<br/>DisplayServices · HID · AppleScript"]
   end
 
-  subgraph docker["Docker"]
-    Opener["laya-opener :8010<br/>Python decide API<br/>host system parser + policy"]
-    Laya["laya-upstream :8001<br/>Laya english, CPU"]
+  subgraph models["Models (pick one)"]
+    Laya["laya-upstream :8001<br/>Laya english, CPU, offline"]
+    Jev["api.typesafe.ai<br/>Jev, HTTPS, API key"]
   end
 
   User -->|click / hover / ⌃⌥Space / Hey Mac| Notch
@@ -97,39 +98,38 @@ flowchart LR
   Mic --> Speech
   Speech -->|partial + final transcript| Notch
   Scan --> Notch
-  Notch -->|POST /decide + catalog + running| Opener
-  Opener -.->|app prediction or paraphrase| Laya
-  Laya -.->|choice + probabilities| Opener
-  Opener -->|action + apps + system + timing| Notch
+  Notch -->|in-app decide| Notch
+  Notch -.->|Laya selected| Laya
+  Notch -.->|Jev selected| Jev
   Notch --> Executors
 ```
 
 | Process | Where | Port | Job |
 |---|---|---|---|
-| `Sayso.app` | `~/Applications/Sayso.app` | — | Notch UI, mic, Apple Speech, catalog scan, app execution & native system controls |
-| `laya-opener` | Docker, **this repo** | `127.0.0.1:8010` | Decide API. System command parsing (~3 ms), Laya prompt builder, policy, alias recovery |
-| `laya-upstream` | Docker, **separate image** | `127.0.0.1:8001` | Laya System-1 English checkpoint on CPU |
+| `Sayso.app` | `~/Applications/Sayso.app` | — | Notch UI, mic, Apple Speech, catalog scan, **decide loop**, app execution & native system controls |
+| `laya-upstream` | Docker, **only if Laya is selected** | `127.0.0.1:8001` | Laya System-1 English checkpoint on CPU |
+| TypeSafe Jev | cloud, **only if Jev is selected** | HTTPS | Same System One request shape; key lives in macOS Keychain |
 
 ```mermaid
 sequenceDiagram
   actor You
   participant Island as Notch island
   participant Speech as Apple Speech
-  participant Opener as laya-opener :8010
-  participant Laya as laya-upstream :8001
+  participant Decide as In-app decide
+  participant Model as Laya :8001 or Jev
   participant Mac as macOS Executors
 
   You->>Island: hover / click / shortcut / Hey Mac
   Island->>Speech: start MicListener
   Speech-->>Island: partials (prefer catalog spelling)
-  Island->>Opener: POST /decide (fires as each new name lands)
+  Island->>Decide: utterance + catalog + running
   alt App prediction or system paraphrase
-    Opener->>Laya: POST /v1/systemone
-    Laya-->>Opener: probabilities
+    Decide->>Model: POST /v1/systemone
+    Model-->>Decide: probabilities
   else Fully-parsed system command (~3 ms)
-    Note over Opener: Parse volume, brightness, lock, dark mode, etc.
+    Note over Decide: Parse volume, brightness, lock, dark mode, etc.
   end
-  Opener-->>Island: action, apps, system, timing
+  Decide-->>Island: action, apps, system, timing
   Island->>Mac: open / close / quit / system controls
   Speech-->>Island: silence → finish
 ```
@@ -137,23 +137,40 @@ sequenceDiagram
 How the pieces fit:
 
 1. The island listens with the Mac’s own speech recognizer.
-2. It asks the decide service on `localhost:8010` — “what did they mean?”
-3. Fully-parsed system commands (volume, brightness, lock, dark mode, battery, etc.) resolve on the host in ~3 ms without calling Laya.
-4. For app requests and paraphrases, that service asks Laya on `localhost:8001` — still this machine, still Docker.
-5. Laya returns scores. Policy + spoken-name aliases pick the app.
+2. Decide runs inside Sayso — “what did they mean?”
+3. Fully-parsed system commands (volume, brightness, lock, dark mode, battery, etc.) resolve in ~3 ms without calling a model.
+4. For app requests and paraphrases, Sayso POSTs System One to Laya (`localhost:8001`) or Jev (`api.typesafe.ai`).
+5. The model returns scores. Policy + spoken-name aliases pick the app.
 6. The island opens, closes, or quits apps, or directly adjusts macOS settings (CoreAudio, DisplayServices, HID, AppleScript).
 
 Full internals: [docs/how-it-works.md](docs/how-it-works.md). Speech notes: [docs/speech-recognition.md](docs/speech-recognition.md). Latency notes: [docs/voice-to-open-latency.md](docs/voice-to-open-latency.md).
+
+## Install (no clone)
+
+Latest: [GitHub Releases](https://github.com/AshutoshKY/sayso/releases/latest) — **v0.2.0**.
+
+macOS 14+ on Apple Silicon.
+
+1. Download **Sayso-0.2.0-macos-arm64.dmg** (or the `.zip`).
+2. Open the disk image and drag **Sayso** into **Applications**.
+3. Open Applications → Sayso. The first time, right-click → **Open** if Gatekeeper asks.
+4. Grant **Microphone** and **Speech Recognition**. First *close* needs **Accessibility** once.
+5. Hover the purple notch dot, press **⌃⌥Space**, or say **Hey Mac**.
+
+Default engine is **Off**. Named apps, system settings, and URLs work with no Docker and no API key. Turn on Laya or Jev in Settings only for paraphrases.
+
+To uninstall: quit from the menu-bar waveform, then move `Sayso.app` to the Trash.
 
 ## Requirements
 
 - **macOS 14+** on Apple Silicon (the notch app is `arm64-apple-macos14.0`)
 - **Xcode Command Line Tools** (`xcode-select --install`) — Swift, clang, codesign
-- **Docker Desktop** or OrbStack, with the Docker CLI on `PATH`
-- **`laya-upstream:latest`** already on the machine. This repo does **not** ship the model image. The opener container talks to it at `http://host.docker.internal:8001`.
+- **Docker Desktop** or OrbStack, with the Docker CLI on `PATH` — **only for the Laya engine**
+- **`laya-upstream:latest`** already on the machine if you use Laya. This repo does **not** ship the model image.
+- **Jev API key** in Settings → Keychain if you use Jev. No Docker on that path.
 - First run: grant **Microphone** and **Speech Recognition**. First *close*: grant **Accessibility** once.
 
-If you do not have `laya-upstream:latest`, `docker compose up` will fail on the `laya` service. Build or load that image from the Laya project first, then come back here.
+If you do not have `laya-upstream:latest` and Laya is selected, `docker compose up` will fail on the `laya` service. Build or load that image from the Laya project first, or switch the engine to Jev.
 
 ## Run locally
 
@@ -165,17 +182,15 @@ cd sayso
 
 `./launch` will:
 
-1. Refuse if Docker is not running (and try to open Docker Desktop).
-2. `docker compose up -d --build` (or rebuild only `opener` if `laya-upstream` is already a container).
-3. Poll `http://127.0.0.1:8010/health` for up to 60 s.
-4. Build `Sayso.app` if it is missing, then `open` it.
+1. Build `Sayso.app` if it is missing, then `open` it.
+2. If the selected engine is **Laya**: start only `laya-upstream` and poll `http://127.0.0.1:8001/health`.
+3. If the selected engine is **Off** or **Jev**: skip Docker.
 
-Check the pods:
+Check Laya (only needed when that engine is selected):
 
 ```bash
 docker compose ps
-curl -sS -m 3 http://127.0.0.1:8010/health
-# expect: {"status": "ok", "laya": true}
+curl -sS -m 3 http://127.0.0.1:8001/health
 ```
 
 Then:
@@ -205,16 +220,7 @@ That compiles the Swift accessory, signs it with a stable “Laya Opener” iden
 
 Restarts on crash; stays dead after Quit from the menu.
 
-### Python-only changes (no .app rebuild)
-
-```bash
-docker build -t laya-app-opener:latest .
-docker rm -f laya-opener
-docker compose up -d --no-deps opener
-curl -sS -m 3 http://127.0.0.1:8010/health
-```
-
-### Swift / Info.plist / signing changes
+### Decide-loop / Swift / Info.plist / signing changes
 
 ```bash
 ./scripts/build_app.sh
@@ -242,33 +248,33 @@ Live Laya checks (`tests/test_live_laya.py`) skip unless `:8001` is healthy. Wit
 - `open cloud flare` → `cloudflarewarp`
 - `open youtube in brave` → `open_url` + `https://www.youtube.com` + `brave`
 
-Probe decide yourself:
+Probe decide yourself (same loop the app runs):
 
 ```bash
-curl -sS http://127.0.0.1:8010/decide \
-  -H 'Content-Type: application/json' \
-  -d '{"text":"open notes","catalog":{"notes":{"say":"Notes","aliases":["notes"],"criteria":"Notes.app"}},"running":[],"pending":[]}'
+printf '%s' '{"text":"open notes","catalog":{"notes":{"say":"Notes","aliases":["notes"],"criteria":"Notes.app"}},"backend":"laya","running":[],"pending":[]}' \
+  | PYTHONPATH=. python3 -m opener decide
 ```
 
 ## Repo layout
 
 ```
 sayso/
-├── launch                         # compose up + open the notch app
-├── docker-compose.yml             # laya-upstream :8001, laya-opener :8010
-├── Dockerfile                     # python:3.12-slim → opener.server
+├── launch                         # open Sayso; start laya-upstream only if Laya is selected
+├── docker-compose.yml             # laya-upstream :8001 (Laya engine only)
 ├── catalog.json                   # curated daily catalog (copied into the .app)
-├── opener/                        # runs ONLY in Docker
-│   ├── server.py                  # GET /health, POST /decide
-│   ├── loop.py                    # split / Laya / alias recover
-│   ├── client.py                  # questions_for + POST Laya
+├── opener/                        # decide loop, bundled into Sayso.app
+│   ├── __main__.py                # python3 -m opener decide
+│   ├── engine.py                  # Laya vs Jev System One adapters
+│   ├── loop.py                    # split / model / alias recover
+│   ├── client.py                  # questions_for + POST System One
 │   ├── policy.py                  # Decision from probabilities
-│   ├── system_cmd.py              # system controls: host parse + Laya fallback + labels
+│   ├── system_cmd.py              # system controls: host parse + model fallback + labels
 │   ├── alias.py                   # spoken_key, resolve_alias, prefer_catalog
 │   └── …
 ├── native/notch/                  # Swift accessory (Sayso.app)
 ├── scripts/
 │   ├── build_app.sh
+│   ├── package_release.sh         # zip + DMG for GitHub Releases
 │   ├── ensure_codesign.sh
 │   ├── install_launch_agent.sh
 │   └── com.laya.opener.plist      # template; __HOME__ substituted on install
@@ -281,7 +287,7 @@ Python and Swift keep alias / speech-form / `preferCatalog` rules in lockstep.
 ## Product rules
 
 - Voice-first, **English only**.
-- **Every utterance calls Laya.** Host matching may add extras or recover an exact installed name after Laya asks. It must not skip the call.
+- Default engine is **Off**. Named apps, system settings, and URLs stay on-device. Turn on Laya or Jev only for paraphrases the host cannot match.
 - Missing or unrecognized → open nothing. No Calendar / Chrome / default-browser fallthrough.
 - Several names in one phrase (`and` / `,` / `then`) → act on every hit. Same after a wake word (*hey mac open notes and safari*).
 - Wake + command stays on one speech session. The first name or a system fragment (*increase volume*) must not cut the mic, or *and safari* / *by 2* never arrive.

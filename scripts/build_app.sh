@@ -10,10 +10,8 @@ from opener.catalog import APPS, LAYA_URL
 from opener.policy import DEFAULT_THRESHOLDS
 payload = {
     "laya_url": LAYA_URL,
-    "opener_url": "http://127.0.0.1:8010/decide",
-    "opener_health": "http://127.0.0.1:8010/health",
-    "container": "laya-opener",
     "laya_container": "laya-upstream",
+    "container": "laya-upstream",
     "thresholds": DEFAULT_THRESHOLDS,
     "intent": {
         "launch": "user wants a macOS application launched or brought to the front right now",
@@ -33,6 +31,8 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$root/native/notch/Info.plist" "$app/Contents/Info.plist"
 cp "$root/catalog.json" "$app/Contents/Resources/catalog.json"
+# Decide loop ships inside the app. One implementation — the Python package.
+rsync -a --delete --exclude='__pycache__' --exclude='*.pyc' "$root/opener/" "$app/Contents/Resources/opener/"
 if [[ -f "$root/native/notch/AppIcon.icns" ]]; then
   cp "$root/native/notch/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
 fi

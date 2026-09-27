@@ -245,16 +245,17 @@ class SettingsNormalizeTests(unittest.TestCase):
             out["hotkey"],
             {"key": "space", "key_code": 49, "modifiers": ["control", "option"]},
         )
-        self.assertEqual(out["decision_backend"], "laya")
+        self.assertEqual(out["decision_backend"], "host")
 
     def test_clamps_hover_dwell(self):
         self.assertEqual(normalize_settings({"hover_dwell_ms": 10})["hover_dwell_ms"], 100)
         self.assertEqual(normalize_settings({"hover_dwell_ms": 9000})["hover_dwell_ms"], 2000)
         self.assertEqual(normalize_settings({"hover_dwell_ms": 750})["hover_dwell_ms"], 750)
 
-    def test_unknown_backend_falls_back_to_laya(self):
+    def test_unknown_backend_falls_back_to_host(self):
         self.assertEqual(normalize_settings({"decision_backend": "jev"})["decision_backend"], "jev")
-        self.assertEqual(normalize_settings({"decision_backend": "nope"})["decision_backend"], "laya")
+        self.assertEqual(normalize_settings({"decision_backend": "laya"})["decision_backend"], "laya")
+        self.assertEqual(normalize_settings({"decision_backend": "nope"})["decision_backend"], "host")
 
     def test_wake_phrases_are_cleaned(self):
         out = normalize_settings({"wake_phrases": ["  Hey MAC ", "", "Okay Computer"]})

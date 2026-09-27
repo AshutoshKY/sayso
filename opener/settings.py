@@ -4,7 +4,7 @@ import re
 
 
 DEFAULT_WAKE_PHRASES = ["hey mac", "bhai mac"]
-KNOWN_BACKENDS = ("laya", "jev")
+KNOWN_BACKENDS = ("host", "laya", "jev")
 HOVER_DWELL_MIN_MS = 100
 HOVER_DWELL_MAX_MS = 2000
 
@@ -93,7 +93,7 @@ DEFAULT_SETTINGS = {
     "wake_phrases": list(DEFAULT_WAKE_PHRASES),
     "hover_dwell_ms": 500,
     "hotkey": dict(DEFAULT_HOTKEY),
-    "decision_backend": "laya",
+    "decision_backend": "host",
 }
 
 

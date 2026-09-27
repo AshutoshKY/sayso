@@ -1,34 +1,8 @@
 #!/bin/zsh
-# Bring up THIS project's Docker stack, then open the notch companion.
+# Open Sayso. If Laya is the selected engine, start only laya-upstream.
 set -euo pipefail
 root="$(cd "$(dirname "$0")" && pwd)"
 cd "$root"
-
-if ! docker info >/dev/null 2>&1; then
-  echo "Docker Desktop is not running. Open it, then run ./launch again."
-  open -a Docker || true
-  exit 2
-fi
-
-if docker inspect laya-upstream >/dev/null 2>&1; then
-  docker compose up -d --build --no-deps opener
-else
-  docker compose up -d --build
-fi
-
-echo "waiting for laya-opener on 127.0.0.1:8010 …"
-for i in {1..60}; do
-  if curl -fsS http://127.0.0.1:8010/health >/dev/null 2>&1; then
-    break
-  fi
-  sleep 1
-done
-
-if ! curl -fsS http://127.0.0.1:8010/health >/dev/null 2>&1; then
-  echo "laya-opener did not become healthy. docker compose ps:"
-  docker compose ps
-  exit 2
-fi
 
 app="$HOME/Applications/Sayso.app"
 if [[ ! -x "$app/Contents/MacOS/Sayso" ]]; then
@@ -38,7 +12,35 @@ if [[ ! -x "$app/Contents/MacOS/Sayso" ]]; then
   "$root/scripts/build_app.sh"
   app="$HOME/Applications/Sayso.app"
 fi
+
+backend="$(defaults read com.laya.opener decision_backend 2>/dev/null || echo host)"
+if [[ "$backend" == "laya" ]]; then
+  if ! docker info >/dev/null 2>&1; then
+    echo "Docker Desktop is not running. Open it, then run ./launch again."
+    open -a Docker || true
+    exit 2
+  fi
+  if docker inspect laya-upstream >/dev/null 2>&1; then
+    docker start laya-upstream >/dev/null
+  else
+    docker compose up -d
+  fi
+  echo "waiting for laya-upstream on 127.0.0.1:8001 …"
+  for i in {1..90}; do
+    if curl -fsS http://127.0.0.1:8001/health >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+  if ! curl -fsS http://127.0.0.1:8001/health >/dev/null 2>&1; then
+    echo "laya-upstream did not become healthy. docker compose ps:"
+    docker compose ps
+    exit 2
+  fi
+fi
+
 open "$app"
-echo "stack:"
-docker compose ps
 echo "Sayso is in the notch. Click it, or press Control-Option-Space."
+if [[ "$backend" == "laya" ]]; then
+  docker compose ps
+fi

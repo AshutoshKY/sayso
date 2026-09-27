@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Combine
+import Security
 import SwiftUI
 
 /// Host preferences. Keep wake forms / key codes in lockstep with opener/settings.py.
@@ -15,11 +16,12 @@ enum PrefKey {
     static let hover = "hover_dwell_ms"
     static let hotkey = "hotkey"
     static let backend = "decision_backend"
+    static let jevAccount = "jev-api-key"
 }
 
 enum SettingsLogic {
     static let defaultPhrases = ["hey mac", "bhai mac"]
-    static let backends = ["laya", "jev"]
+    static let backends = ["host", "laya", "jev"]
     static let hoverMin = 100
     static let hoverMax = 2000
     static let wakeForms: [String: [String]] = [
@@ -237,6 +239,7 @@ final class Preferences: ObservableObject {
     @Published var hotkeyKey: String { didSet { persist() } }
     @Published var hotkeyModifiers: [String] { didSet { persist() } }
     @Published var decisionBackend: String { didSet { persist() } }
+    @Published var jevAPIKey: String = "" { didSet { persistJevKey() } }
 
     var micNeeded: Bool { listeningEnabled && wakeEnabled }
 
@@ -313,8 +316,9 @@ final class Preferences: ObservableObject {
             hotkeyKey = "space"
             hotkeyModifiers = ["control", "option"]
         }
-        let backend = (defaults.string(forKey: PrefKey.backend) ?? "laya").lowercased()
-        decisionBackend = SettingsLogic.backends.contains(backend) ? backend : "laya"
+        let backend = (defaults.string(forKey: PrefKey.backend) ?? "host").lowercased()
+        decisionBackend = SettingsLogic.backends.contains(backend) ? backend : "host"
+        jevAPIKey = Keychain.get(account: PrefKey.jevAccount) ?? ""
         ready = true
     }
 
@@ -340,7 +344,62 @@ final class Preferences: ObservableObject {
         )
         defaults.set(decisionBackend, forKey: PrefKey.backend)
         writing = false
+        persistJevKey()
         onChange?()
+    }
+
+    private func persistJevKey() {
+        guard ready else { return }
+        let trimmed = jevAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            Keychain.delete(account: PrefKey.jevAccount)
+        } else {
+            Keychain.set(account: PrefKey.jevAccount, value: trimmed)
+        }
+    }
+}
+
+enum Keychain {
+    private static let service = PrefKey.suite
+
+    static func get(account: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess, let data = item as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func set(account: String, value: String) {
+        let data = Data(value.utf8)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        let update: [String: Any] = [kSecValueData as String: data]
+        let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        if status == errSecItemNotFound {
+            var add = query
+            add[kSecValueData as String] = data
+            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+            SecItemAdd(add as CFDictionary, nil)
+        }
+    }
+
+    static func delete(account: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(query as CFDictionary)
     }
 }
 
@@ -415,11 +474,21 @@ struct SettingsRoot: View {
             }
             Section("Decision") {
                 Picker("Engine", selection: $prefs.decisionBackend) {
-                    Text("Laya").tag("laya")
-                    Text("Jev (soon)").tag("jev")
+                    Text("Off").tag("host")
+                    Text("Laya (local)").tag("laya")
+                    Text("Jev").tag("jev")
                 }
-                if prefs.decisionBackend != "laya" {
-                    Text("\(prefs.decisionBackend.capitalized) is not wired yet. Requests will not open apps until it is.")
+                if prefs.decisionBackend == "host" {
+                    Text("Named apps, system settings, and URLs stay on-device. Turn on Laya or Jev for paraphrases.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else if prefs.decisionBackend == "laya" {
+                    Text("Uses the local laya-upstream Docker model. No internet required.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    SecureField("Jev API key", text: $prefs.jevAPIKey)
+                    Text("Stored in Keychain. Sayso talks to TypeSafe directly — no Docker.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
